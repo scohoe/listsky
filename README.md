@@ -31,21 +31,33 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ### GitHub Repository
 
-1. Create a new repository on GitHub
+1. Create a new repository on GitHub:
+   - Go to [GitHub](https://github.com/) and sign in to your account
+   - Click the '+' icon in the top-right corner and select 'New repository'
+   - Name your repository `bluesky-listings`
+   - Add an optional description
+   - Choose the repository visibility (public or private)
+   - Do NOT initialize with README, .gitignore, or license files
+   - Click 'Create repository'
+
 2. Push your local repository to GitHub:
    ```bash
-   git remote add origin https://github.com/yourusername/bluesky-listings.git
    git branch -M main
    git push -u origin main
    ```
 
+   Note: The remote URL has been updated to: https://github.com/scohoe/bluesky-listings
+
 ### Vercel Deployment
 
 1. Sign up for a free account at [Vercel](https://vercel.com)
-2. Import your GitHub repository
-3. Vercel will automatically detect Next.js and configure the build settings
-4. Deploy with a single click
-5. Your app will be live at `https://your-project-name.vercel.app`
+2. From the Vercel dashboard, click "Add New" > "Project"
+3. Select the GitHub repository `scohoe/bluesky-listings`
+   - You may need to connect your GitHub account if you haven't already
+4. Vercel will automatically detect Next.js and configure the build settings
+5. Click "Deploy" to start the deployment process
+6. Once deployed, your app will be live at `https://bluesky-listings.vercel.app` (or a similar URL assigned by Vercel)
+7. You can configure a custom domain in the Vercel project settings if desired
 
 ## License
 
