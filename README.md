@@ -31,6 +31,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ### GitHub Repository
 
+**Important:** The repository `https://github.com/scohoe/bluesky-listings` does not exist yet. You need to create it first:
+
 1. Create a new repository on GitHub:
    - Go to [GitHub](https://github.com/) and sign in to your account
    - Click the '+' icon in the top-right corner and select 'New repository'
@@ -42,11 +44,12 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 2. Push your local repository to GitHub:
    ```bash
+   git remote set-url origin https://github.com/scohoe/bluesky-listings
    git branch -M main
    git push -u origin main
    ```
 
-   Note: The remote URL has been updated to: https://github.com/scohoe/bluesky-listings
+   Note: Make sure to create the repository on GitHub before pushing.
 
 ### Vercel Deployment
 
