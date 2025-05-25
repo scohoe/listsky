@@ -377,7 +377,7 @@ const ListingDetailPage = () => {
                 )
               )}
               {session?.did === post.author.did && (
-                  <Link href={`/listings/edit/${encodeURIComponent(post.uri)}`} passHref>
+                  <Link href={`/listings/${encodeURIComponent(post.uri)}/edit`} passHref>
                       <Button variant="outline">Edit Listing</Button>
                   </Link>
               )}

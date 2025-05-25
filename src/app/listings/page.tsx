@@ -3,7 +3,7 @@
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import ListingFilters, { FilterOptions } from '@/components/listing-filters';
+import { ListingFilters } from '@/components/listing-filters';
 import { useState, useEffect } from 'react';
 import { getAgent, getCurrentSession } from '@/lib/atproto';
 import { AppBskyFeedDefs, BskyAgent } from '@atproto/api';

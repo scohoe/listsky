@@ -4,6 +4,7 @@ import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/lib/auth-context'; // Added import
 import Header from '@/components/header'; // Assuming you have a Header component
+import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
             <main className="container mx-auto px-4 py-8">
               {children}
             </main>
+            <Toaster />
             {/* You can add a Footer component here if needed */}
           </AuthProvider>
         </ThemeProvider>
