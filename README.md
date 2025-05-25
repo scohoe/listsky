@@ -20,6 +20,24 @@ A Craigslist-like application built on the AT Protocol that allows Bluesky users
 
 ## Getting Started
 
+### Environment Setup
+
+1. Create a `.env` file in the root directory (or use the existing one)
+2. Ensure it contains the following variables:
+
+```
+NEXTAUTH_SECRET=your_generated_secret_here
+NEXTAUTH_URL=http://localhost:3000
+```
+
+You can generate a secure random string for NEXTAUTH_SECRET using PowerShell:
+
+```powershell
+$bytes = New-Object byte[] 32; (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes); [Convert]::ToBase64String($bytes)
+```
+
+### Installation and Development
+
 ```bash
 npm install
 npm run dev
