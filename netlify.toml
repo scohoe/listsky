@@ -1,0 +1,15 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Environment variables that should be set in Netlify dashboard:
+# NEXTAUTH_SECRET - Generate with: openssl rand -base64 32
+# NEXTAUTH_URL - Your Netlify site URL (e.g., https://your-site-name.netlify.app)
