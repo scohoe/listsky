@@ -4,7 +4,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { BskyAgent, ComAtprotoServerDefs } from '@atproto/api';
 import { getAgent, loginWithBsky as apiLogin, getCurrentSession as apiGetCurrentSession, logout as apiLogout } from './atproto';
 
-interface UserSession extends ComAtprotoServerDefs.Session {
+interface UserSession {
+  did: string;
+  handle: string;
+  email?: string;
+  accessJwt: string;
+  refreshJwt: string;
   // Add any custom fields you might want to store alongside the session
 }
 

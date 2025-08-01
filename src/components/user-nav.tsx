@@ -26,7 +26,7 @@ interface UserProfile {
 }
 
 export function UserNav() {
-  const { session, logout: contextLogout, isLoading: authIsLoading } = useAuth(); // Use AuthContext
+  const { session, agent, logout: contextLogout, isLoading: authIsLoading } = useAuth(); // Use AuthContext
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const router = useRouter();
@@ -34,10 +34,10 @@ export function UserNav() {
   
   useEffect(() => {
     const fetchUserProfile = async () => {
-      if (session?.did) {
+      if (agent?.session?.did) {
         setIsProfileLoading(true);
         try {
-          const profile = await getProfile(session.did);
+          const profile = await getProfile(agent.session.did);
           if (profile) {
             setUserProfile({
               name: profile.displayName || profile.handle,
@@ -47,18 +47,18 @@ export function UserNav() {
           } else {
             // Fallback if profile fetch fails but session exists
             setUserProfile({
-              name: session.handle, // Use handle from session as fallback name
-              handle: session.handle,
-              image: `/placeholder.svg?width=32&height=32&query=${encodeURIComponent(session.handle)}`
+              name: agent.session.handle || 'User', // Use handle from session as fallback name
+              handle: agent.session.handle || 'unknown',
+              image: `/placeholder.svg?width=32&height=32&query=${encodeURIComponent(agent.session.handle || 'user')}`
             });
           }
         } catch (error) {
           console.error('Error fetching user profile:', error);
           // Fallback if profile fetch errors
           setUserProfile({
-            name: session.handle,
-            handle: session.handle,
-            image: `/placeholder.svg?width=32&height=32&query=${encodeURIComponent(session.handle)}`
+            name: agent.session.handle || 'User',
+            handle: agent.session.handle || 'unknown',
+            image: `/placeholder.svg?width=32&height=32&query=${encodeURIComponent(agent.session.handle || 'user')}`
           });
         } finally {
           setIsProfileLoading(false);
@@ -106,7 +106,7 @@ export function UserNav() {
     return (
       <Button variant="ghost" className="relative h-8 w-8 rounded-full">
         <Avatar className="h-8 w-8">
-          <AvatarFallback>{session.handle.charAt(0).toUpperCase()}</AvatarFallback>
+          <AvatarFallback>{(agent?.session?.handle || 'U').charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
       </Button>
     );
@@ -119,8 +119,8 @@ export function UserNav() {
     return (
       <Button variant="ghost" className="relative h-8 w-8 rounded-full">
         <Avatar className="h-8 w-8">
-          <AvatarImage src={`/placeholder.svg?width=32&height=32&query=${encodeURIComponent(session.handle)}`} alt={session.handle} />
-          <AvatarFallback>{session.handle.charAt(0).toUpperCase()}</AvatarFallback>
+          <AvatarImage src={`/placeholder.svg?width=32&height=32&query=${encodeURIComponent(agent?.session?.handle || 'user')}`} alt={agent?.session?.handle || 'User'} />
+          <AvatarFallback>{(agent?.session?.handle || 'U').charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
       </Button>
     );

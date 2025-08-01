@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+// Force dynamic rendering to avoid prerendering issues
+export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { AppBskyFeedDefs } from '@atproto/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,18 +29,16 @@ const CATEGORIES = [
   'Other'
 ];
 
-// The actual listing data is within post.record
-interface ListingPost extends AppBskyFeedDefs.FeedViewPost {
-  post: {
-    record: {
-      $type: 'app.bsky.feed.listing';
-      title: string;
-      description: string;
-      price?: string;
-      category?: string;
-      location?: string;
-      createdAt: string;
-    };
+// The actual listing data is within record
+interface ListingPost extends AppBskyFeedDefs.PostView {
+  record: {
+    $type: 'app.bsky.feed.listing';
+    title: string;
+    description: string;
+    price?: string;
+    category?: string;
+    location?: string;
+    createdAt: string;
   };
 }
 
@@ -49,7 +50,7 @@ interface SearchFilters {
   location: string;
 }
 
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialKeywords = searchParams.get('q') || '';
@@ -121,10 +122,9 @@ export default function SearchPage() {
         if (result.success && result.data) {
           // Filter for posts that match our listing schema NSID
           const listingPosts = result.data.posts.filter(
-            (item): item is ListingPost =>
-              AppBskyFeedDefs.isFeedViewPost(item) &&
-              item.post.record?.$type === 'app.bsky.feed.listing'
-          );
+            (item) =>
+              (item.record as any)?.$type === 'app.bsky.feed.listing'
+          ) as unknown as ListingPost[];
           setListings(listingPosts);
         } else {
           setError(result.error || 'Failed to fetch listings.');
@@ -149,7 +149,7 @@ export default function SearchPage() {
     // Filter by category
     if (filters.category !== 'All Categories') {
       filtered = filtered.filter(item => 
-        item.post.record.category?.toLowerCase() === filters.category.toLowerCase()
+        item.record.category?.toLowerCase() === filters.category.toLowerCase()
       );
     }
     
@@ -157,7 +157,7 @@ export default function SearchPage() {
     if (filters.priceMin > 0 || filters.priceMax < 5000) {
       filtered = filtered.filter(item => {
         // Extract numeric value from price string (e.g., "$100" -> 100)
-        const priceStr = item.post.record.price || '';
+        const priceStr = item.record.price || '';
         const priceMatch = priceStr.match(/\$?(\d+)/);
         if (!priceMatch) return false;
         
@@ -169,7 +169,7 @@ export default function SearchPage() {
     // Filter by location
     if (filters.location) {
       filtered = filtered.filter(item => 
-        item.post.record.location?.toLowerCase().includes(filters.location.toLowerCase())
+        item.record.location?.toLowerCase().includes(filters.location.toLowerCase())
       );
     }
     
@@ -177,8 +177,8 @@ export default function SearchPage() {
     if (filters.keywords) {
       const keywords = filters.keywords.toLowerCase();
       filtered = filtered.filter(item => 
-        item.post.record.title.toLowerCase().includes(keywords) ||
-        item.post.record.description.toLowerCase().includes(keywords)
+        item.record.title.toLowerCase().includes(keywords) ||
+        item.record.description.toLowerCase().includes(keywords)
       );
     }
     
@@ -278,39 +278,39 @@ export default function SearchPage() {
         <div>
           <p className="text-muted-foreground mb-4">Found {filteredListings.length} listings</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredListings.map(({ post }) => {
+            {filteredListings.map((listing) => {
               // Placeholder image - replace with actual image handling later if needed
-              const imageUrl = `/placeholder.svg?width=400&height=300&query=${encodeURIComponent(post.record.category || 'listing')}`;
+              const imageUrl = `/placeholder.svg?width=400&height=300&query=${encodeURIComponent(listing.record.category || 'listing')}`;
               return (
-                <Card key={post.uri} className="overflow-hidden flex flex-col h-full">
+                <Card key={listing.uri} className="overflow-hidden flex flex-col h-full">
                   <div className="aspect-video relative overflow-hidden">
                     <img 
                       src={imageUrl} 
-                      alt={post.record.title}
+                      alt={listing.record.title}
                       className="object-cover w-full h-full transition-transform hover:scale-105"
                     />
                   </div>
                   <CardHeader>
-                    <CardTitle className="line-clamp-1">{post.record.title}</CardTitle>
+                    <CardTitle className="line-clamp-1">{listing.record.title}</CardTitle>
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-lg">{post.record.price || 'N/A'}</span>
-                      <span className="text-sm text-muted-foreground">{post.record.location || 'Unknown Location'}</span>
+                      <span className="font-bold text-lg">{listing.record.price || 'N/A'}</span>
+                      <span className="text-sm text-muted-foreground">{listing.record.location || 'Unknown Location'}</span>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-grow">
-                    <p className="text-muted-foreground line-clamp-2">{post.record.description}</p>
+                    <p className="text-muted-foreground line-clamp-2">{listing.record.description}</p>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      {post.record.category && <span className="text-xs px-2 py-1 bg-secondary rounded-full">{post.record.category}</span>}
-                      <span className="text-xs text-muted-foreground">Posted {new Date(post.record.createdAt).toLocaleDateString()}</span>
+                      {listing.record.category && <span className="text-xs px-2 py-1 bg-secondary rounded-full">{listing.record.category}</span>}
+                      <span className="text-xs text-muted-foreground">Posted {new Date(listing.record.createdAt).toLocaleDateString()}</span>
                     </div>
                   </CardContent>
                   <CardFooter className="border-t pt-4">
                     <div className="flex justify-between items-center w-full">
-                      <Link href={`https://bsky.app/profile/${post.author.handle}`} target="_blank" rel="noopener noreferrer" className="text-sm hover:underline">
-                        @{post.author.handle}
+                      <Link href={`https://bsky.app/profile/${listing.author.handle}`} target="_blank" rel="noopener noreferrer" className="text-sm hover:underline">
+                        @{listing.author.handle}
                       </Link>
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/listings/${encodeURIComponent(post.uri)}`}>View Details</Link>
+                        <Link href={`/listings/${encodeURIComponent(listing.uri)}`}>View Details</Link>
                       </Button>
                     </div>
                   </CardFooter>
@@ -321,5 +321,13 @@ export default function SearchPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 py-8"><p className="text-center">Loading search...</p></div>}>
+      <SearchPageContent />
+    </Suspense>
   );
 }

@@ -110,7 +110,7 @@ function MyListingsPage() {
               createdAt: value.listing.createdAt || value.createdAt,
             },
             embed: value.embed,
-            indexedAt: record.indexedAt,
+            indexedAt: record.indexedAt as string,
             createdAt: value.createdAt,
           });
         }

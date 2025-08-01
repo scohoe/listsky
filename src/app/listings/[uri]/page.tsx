@@ -11,7 +11,7 @@ import { getAgent } from '@/lib/atproto';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, ExternalLink, MapPin, Tag, DollarSign, CalendarDays, MessageSquare } from 'lucide-react';
+import { Loader2, ArrowLeft, ExternalLink, MapPin, Tag, DollarSign, CalendarDays, MessageSquare, ListFilter } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 interface ListingPostRecord {
@@ -77,7 +77,7 @@ interface FullPostView {
 const ListingDetailPage = () => {
   const params = useParams();
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, agent } = useAuth();
   const [post, setPost] = useState<FullPostView | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,13 +180,15 @@ const ListingDetailPage = () => {
 
   const handleNextImage = () => {
     if (post?.record.embed?.$type === 'app.bsky.embed.images') {
-      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % post.record.embed.images.length);
+      const embed = post.record.embed as { $type: 'app.bsky.embed.images'; images: EmbeddedImage[] };
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % embed.images.length);
     }
   };
 
   const handlePrevImage = () => {
     if (post?.record.embed?.$type === 'app.bsky.embed.images') {
-      setCurrentImageIndex((prevIndex) => (prevIndex - 1 + post.record.embed.images.length) % post.record.embed.images.length);
+      const embed = post.record.embed as { $type: 'app.bsky.embed.images'; images: EmbeddedImage[] };
+      setCurrentImageIndex((prevIndex) => (prevIndex - 1 + embed.images.length) % embed.images.length);
     }
   };
 
@@ -351,7 +353,7 @@ const ListingDetailPage = () => {
               <CalendarDays className="h-4 w-4 mr-2 opacity-70" /> Posted on {new Date(listing.createdAt).toLocaleDateString()}
             </div>
             <div className="flex gap-2">
-              {session?.did !== post.author.did && (
+              {agent.session?.did !== post.author.did && (
                 listing.allowDirectMessage ? (
                   <Link 
                     href={`https://bsky.app/messages/${post.author.did}?text=${encodeURIComponent(`Regarding your listing: "${listing.title}" (${post.uri})`)}`} 
@@ -376,7 +378,7 @@ const ListingDetailPage = () => {
                   </Link>
                 )
               )}
-              {session?.did === post.author.did && (
+              {agent.session?.did === post.author.did && (
                   <Link href={`/listings/${encodeURIComponent(post.uri)}/edit`} passHref>
                       <Button variant="outline">Edit Listing</Button>
                   </Link>

@@ -112,19 +112,23 @@ export default function ListingsPage() {
 
             if (centerCoords) {
               // Filter listings by distance
-              filtered = filtered.filter((post) => {
+              const filteredByDistance = [];
+              for (const post of filtered) {
                 const listingZipCode = post.record.listing?.location?.zipCode;
-                if (!listingZipCode) return false;
+                if (!listingZipCode) continue;
 
                 // Try to get coordinates for this listing
                 try {
                   // For performance, we'll use a simple string comparison first
                   // If the ZIP codes match exactly, it's definitely within the radius
-                  if (listingZipCode === centerZipCode) return true;
+                  if (listingZipCode === centerZipCode) {
+                    filteredByDistance.push(post);
+                    continue;
+                  }
 
                   // Otherwise, calculate the distance
-                  const listingCoords = getZipCodeCoordinates(listingZipCode);
-                  if (!listingCoords) return false;
+                  const listingCoords = await getZipCodeCoordinates(listingZipCode);
+                  if (!listingCoords) continue;
 
                   // Calculate distance between the two points
                   const distance = getDistanceFromLatLng(
@@ -135,13 +139,18 @@ export default function ListingsPage() {
                     true // Return distance in miles
                   );
 
-                  return distance <= radiusMiles;
+                  if (distance <= radiusMiles) {
+                    filteredByDistance.push(post);
+                  }
                 } catch (error) {
                   console.error('Error calculating distance for listing:', error);
                   // Fall back to simple string matching if we can't calculate distance
-                  return listingZipCode.startsWith(centerZipCode.substring(0, 3));
+                  if (listingZipCode.startsWith(centerZipCode.substring(0, 3))) {
+                    filteredByDistance.push(post);
+                  }
                 }
-              });
+              }
+              filtered = filteredByDistance;
             }
           } catch (error) {
             console.error('Error filtering by location:', error);
@@ -240,7 +249,7 @@ export default function ListingsPage() {
       const listingPosts = response.data.feed.filter(
         (post) =>
           post.reason?.$type !== 'app.bsky.feed.defs#reasonRepost' &&
-          post.post.record.$type === 'app.bsky.feed.post' &&
+          (post.post.record as any).$type === 'app.bsky.feed.post' &&
           (post.post.record as any).listing
       ) as ListingPost[];
 

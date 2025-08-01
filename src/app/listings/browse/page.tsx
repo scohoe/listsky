@@ -9,7 +9,16 @@ import Link from 'next/link';
 import { getAgent } from '@/lib/atproto';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
-import { ListingFilters, Filters as FilterOptions } from '@/components/listing-filters';
+import ListingFilters from '@/components/listing-filters';
+
+// Define FilterOptions interface to match ListingFilters component
+interface FilterOptions {
+  category: string;
+  minPrice: string;
+  maxPrice: string;
+  location: string;
+  radius: string;
+}
 
 interface ListingPostRecord {
   title: string;
@@ -70,7 +79,7 @@ const ListingsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [activeFilters, setActiveFilters] = useState<FilterOptions>({ keyword: '', category: '', zipCode: '', radius: '' });
+  const [activeFilters, setActiveFilters] = useState<FilterOptions>({ category: '', minPrice: '', maxPrice: '', location: '', radius: '' });
 
   const fetchListings = async (currentCursor?: string, filters: FilterOptions = activeFilters) => {
     setIsLoading(true);
@@ -98,28 +107,27 @@ const ListingsPage = () => {
       let filteredFeed = response.data.feed;
 
       // CLIENT-SIDE FILTERING (Placeholder - should be server-side)
-      if (filters.keyword) {
-        const keywordLower = filters.keyword.toLowerCase();
-        filteredFeed = filteredFeed.filter(item => {
-          const record = (item.post.record as any);
-          const listingData = record['app.bsky.feed.listing'];
-          return (record.text?.toLowerCase().includes(keywordLower) || 
-                  listingData?.title?.toLowerCase().includes(keywordLower) || 
-                  listingData?.description?.toLowerCase().includes(keywordLower));
-        });
-      }
       if (filters.category) {
         filteredFeed = filteredFeed.filter(item => {
           const listingData = (item.post.record as any)['app.bsky.feed.listing'];
           return listingData?.category?.toLowerCase() === filters.category.toLowerCase();
         });
       }
-      if (filters.zipCode) {
+      if (filters.location) {
         // Basic ZIP code matching. Radius filtering is complex and needs geolocation data + calculations.
         // This is a very simplified placeholder.
         filteredFeed = filteredFeed.filter(item => {
           const listingData = (item.post.record as any)['app.bsky.feed.listing'];
-          return listingData?.location?.zipCode === filters.zipCode;
+          return listingData?.location?.zipCode === filters.location;
+        });
+      }
+      if (filters.minPrice || filters.maxPrice) {
+        filteredFeed = filteredFeed.filter(item => {
+          const listingData = (item.post.record as any)['app.bsky.feed.listing'];
+          const price = parseFloat(listingData?.price?.replace(/[^\d.]/g, '') || '0');
+          const minPrice = filters.minPrice ? parseFloat(filters.minPrice) : 0;
+          const maxPrice = filters.maxPrice ? parseFloat(filters.maxPrice) : Infinity;
+          return price >= minPrice && price <= maxPrice;
         });
       }
       // Radius filtering is omitted here due to complexity of client-side implementation (needs geo data for listings and user).
@@ -165,7 +173,8 @@ const ListingsPage = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilters]); // Re-fetch when activeFilters change
 
-  const handleFilterSubmit = (newFilters: FilterOptions) => {
+  const handleFilterChange = (filterName: string, value: string) => {
+    const newFilters = { ...activeFilters, [filterName]: value };
     setActiveFilters(newFilters);
     setListings([]); // Clear current listings
     setCursor(undefined); // Reset cursor
@@ -181,7 +190,6 @@ const ListingsPage = () => {
     }
     // Fallback placeholder if essential parts are missing
     return `/placeholder.svg?width=300&height=200&query=${encodeURIComponent(imageBlob?.alt || 'listing image')}`;
-  };
   };
 
   if (isLoading && listings.length === 0) {
@@ -215,7 +223,11 @@ const ListingsPage = () => {
         </div>
 
         <div className="mb-8">
-          <ListingFilters onFilterChange={handleFilterSubmit} isLoading={isLoading && listings.length === 0} />
+          <ListingFilters 
+            onFilterChange={handleFilterChange} 
+            filters={activeFilters}
+            isLoading={isLoading && listings.length === 0} 
+          />
         </div>
 
         {listings.length === 0 && !isLoading && (

@@ -1,7 +1,11 @@
 import { BskyAgent } from '@atproto/api';
+import { atom } from 'jotai';
 
 // Create a singleton instance of the BskyAgent
 let agent: BskyAgent | null = null;
+
+// Jotai atom for the agent
+export const agentAtom = atom<BskyAgent | null>(null);
 
 export function getAgent() {
   if (!agent) {

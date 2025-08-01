@@ -209,7 +209,7 @@ const NewListingPage = () => {
       };
 
       await agent.com.atproto.repo.createRecord({
-        repo: session.did,
+        repo: agent.session.did,
         collection: 'app.bsky.feed.post', 
         record: finalRecord,
       });
