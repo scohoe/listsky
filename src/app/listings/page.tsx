@@ -1,312 +1,408 @@
 'use client';
 
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { ListingFilters } from '@/components/listing-filters';
 import { useState, useEffect } from 'react';
-import { getAgent, getCurrentSession } from '@/lib/atproto';
-import { AppBskyFeedDefs, BskyAgent } from '@atproto/api';
+import { useAgent } from '@/lib/agent';
+import { AppBskyFeedDefs } from '@atproto/api';
+import Card from '@/components/card';
+import ListingFilters from '@/components/listing-filters';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
+import { useToast } from '@/components/ui/use-toast';
+import { GeoError, GeoErrorType } from '@/lib/geo-utils';
 
-// Use the FeedViewPost structure which includes the post and author details
-// The actual listing data is within post.record
+// Import MapView with no SSR to avoid hydration issues
+const MapView = dynamic(() => import('@/components/map-view'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[600px] w-full flex items-center justify-center bg-gray-100">
+      <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+    </div>
+  ),
+});
+
+// Define the interface for a listing post
 interface ListingPost extends AppBskyFeedDefs.FeedViewPost {
-  post: AppBskyFeedDefs.PostView & {
-    record: {
-      // Define the expected structure based on our lexicon
-      $type: 'app.bsky.feed.listing';
+  record: {
+    text: string;
+    $type: string;
+    langs?: string[];
+    createdAt: string;
+    listing?: {
       title: string;
       description: string;
-      price?: string;
-      createdAt: string;
+      price: number;
       category?: string;
-      location?: string;
-      // images?: any[]; // Add later
-    }
-  }
+      location?: {
+        zipCode: string;
+        address?: string;
+      };
+      tags?: string[];
+      images?: string[];
+    };
+  };
 }
 
 export default function ListingsPage() {
+  const agent = useAgent();
+  const { toast } = useToast();
   const [listings, setListings] = useState<ListingPost[]>([]);
   const [filteredListings, setFilteredListings] = useState<ListingPost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FilterOptions>({  
-    category: 'All Categories',
-    priceMin: 0,
-    priceMax: 5000,
+  const [geoError, setGeoError] = useState<GeoError | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  
+  // Filter state
+  const [filters, setFilters] = useState({
+    category: '',
+    minPrice: '',
+    maxPrice: '',
     location: '',
-    keywords: ''
+    radius: '',
   });
 
-  // Apply filters to listings
+  // Fetch listings
   useEffect(() => {
-    if (listings.length === 0) return;
-    
-    let filtered = [...listings];
-    
-    // Filter by category
-    if (filters.category !== 'All Categories') {
-      filtered = filtered.filter(item => 
-        item.post.record.category?.toLowerCase() === filters.category.toLowerCase()
-      );
-    }
-    
-    // Filter by price range
-    if (filters.priceMin > 0 || filters.priceMax < 5000) {
-      filtered = filtered.filter(item => {
-        // Extract numeric value from price string (e.g., "$100" -> 100)
-        const priceStr = item.post.record.price || '';
-        const priceMatch = priceStr.match(/\$?(\d+)/);
-        if (!priceMatch) return false;
-        
-        const price = parseInt(priceMatch[1]);
-        return price >= filters.priceMin && price <= filters.priceMax;
-      });
-    }
-    
-    // Filter by location
-    if (filters.location) {
-      filtered = filtered.filter(item => 
-        item.post.record.location?.toLowerCase().includes(filters.location.toLowerCase())
-      );
-    }
-    
-    // Filter by keywords in title or description
-    if (filters.keywords) {
-      const keywords = filters.keywords.toLowerCase();
-      filtered = filtered.filter(item => 
-        item.post.record.title.toLowerCase().includes(keywords) ||
-        item.post.record.description.toLowerCase().includes(keywords)
-      );
-    }
-    
-    setFilteredListings(filtered);
-  }, [listings, filters]);
-  
-  // Handle filter changes from the ListingFilters component
-  const handleFilterChange = (newFilters: FilterOptions) => {
-    setFilters(newFilters);
-  };
-  
-  useEffect(() => {
-    const fetchListings = async () => {
-      setIsLoading(true);
-      setError(null);
-      setListings([]); // Clear previous listings
+    fetchListings();
+  }, []);
 
+  // Apply filters when they change
+  useEffect(() => {
+    if (!listings.length) return;
+
+    const applyFilters = async () => {
       try {
-        const agent = getAgent();
-        const session = await getCurrentSession();
+        let filtered = [...listings];
 
-        if (!session) {
-          // For a public browse page, we might fetch a general feed or popular listings
-          // For now, we'll show a friendly message and a login button
-          setError('Please log in to view and create listings');
-          setIsLoading(false);
-          return;
-        } else {
-           // Fetch the feed for the current user if session exists
-           const response = await agent.app.bsky.feed.getAuthorFeed({
-             actor: session.did,
-             limit: 50, // Adjust limit as needed
-           });
-
-           if (response.success) {
-             // Filter for posts that match our listing schema NSID
-             const listingPosts = response.data.feed.filter(
-               (item): item is ListingPost =>
-                 AppBskyFeedDefs.isFeedViewPost(item) &&
-                 item.post.record?.$type === 'app.bsky.feed.listing'
-             );
-             setListings(listingPosts);
-           } else {
-             setError('Failed to fetch listings.');
-           }
+        // Filter by category
+        if (filters.category) {
+          filtered = filtered.filter(
+            (post) => post.record.listing?.category === filters.category
+          );
         }
 
-      } catch (err) {
-        console.error('Error fetching listings:', err);
-        setError(err instanceof Error ? err.message : 'An unknown error occurred while fetching listings.');
-      } finally {
-        setIsLoading(false);
+        // Filter by price range
+        if (filters.minPrice) {
+          const minPrice = parseFloat(filters.minPrice);
+          filtered = filtered.filter(
+            (post) => (post.record.listing?.price || 0) >= minPrice
+          );
+        }
+
+        if (filters.maxPrice) {
+          const maxPrice = parseFloat(filters.maxPrice);
+          filtered = filtered.filter(
+            (post) => (post.record.listing?.price || 0) <= maxPrice
+          );
+        }
+
+        // Filter by location/radius
+        if (filters.location && filters.radius) {
+          try {
+            // Dynamically import geolocation utilities to avoid SSR issues
+            const { getZipCodeCoordinates, getDistanceFromLatLng } = await import('@/lib/geo-utils');
+
+            const radiusMiles = parseFloat(filters.radius);
+            const centerZipCode = filters.location;
+
+            // Get coordinates for the center ZIP code
+            const centerCoords = await getZipCodeCoordinates(centerZipCode);
+
+            if (centerCoords) {
+              // Filter listings by distance
+              filtered = filtered.filter((post) => {
+                const listingZipCode = post.record.listing?.location?.zipCode;
+                if (!listingZipCode) return false;
+
+                // Try to get coordinates for this listing
+                try {
+                  // For performance, we'll use a simple string comparison first
+                  // If the ZIP codes match exactly, it's definitely within the radius
+                  if (listingZipCode === centerZipCode) return true;
+
+                  // Otherwise, calculate the distance
+                  const listingCoords = getZipCodeCoordinates(listingZipCode);
+                  if (!listingCoords) return false;
+
+                  // Calculate distance between the two points
+                  const distance = getDistanceFromLatLng(
+                    centerCoords.lat,
+                    centerCoords.lng,
+                    listingCoords.lat,
+                    listingCoords.lng,
+                    true // Return distance in miles
+                  );
+
+                  return distance <= radiusMiles;
+                } catch (error) {
+                  console.error('Error calculating distance for listing:', error);
+                  // Fall back to simple string matching if we can't calculate distance
+                  return listingZipCode.startsWith(centerZipCode.substring(0, 3));
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error filtering by location:', error);
+            // Handle geolocation errors
+            if (error instanceof GeoError) {
+              setGeoError(error);
+              
+              // Show appropriate error message based on error type
+              switch (error.type) {
+                case GeoErrorType.INVALID_ZIPCODE:
+                  toast({
+                    variant: "destructive",
+                    title: "Invalid ZIP Code",
+                    description: `${filters.location} is not a valid ZIP code.`
+                  });
+                  break;
+                case GeoErrorType.NETWORK_ERROR:
+                  toast({
+                    variant: "destructive",
+                    title: "Network Error",
+                    description: "Network error while filtering by location. Using basic filtering instead."
+                  });
+                  break;
+                case GeoErrorType.API_ERROR:
+                  toast({
+                    variant: "destructive",
+                    title: "Service Error",
+                    description: "Error with location service. Using basic filtering instead."
+                  });
+                  break;
+                default:
+                  toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Error filtering by location. Using basic filtering instead."
+                  });
+              }
+              
+              // Fall back to simple string matching
+              filtered = filtered.filter((post) => {
+                const listingZipCode = post.record.listing?.location?.zipCode;
+                return listingZipCode && listingZipCode.startsWith(filters.location.substring(0, 3));
+              });
+            }
+          }
+        }
+
+        setFilteredListings(filtered);
+      } catch (error) {
+        console.error('Error applying filters:', error);
+        toast({
+          variant: "destructive",
+          title: "Filter Error",
+          description: "Error applying filters. Please try again."
+        });
       }
     };
 
-    fetchListings();
-  }, []); // Re-run if needed based on auth state changes (add dependency later)
-  
-  // Initialize filtered listings with all listings when listings change
-  useEffect(() => {
-    setFilteredListings(listings);
-  }, [listings]);
+    applyFilters();
+  }, [listings, filters]);
 
-  // Mock listings (remove or comment out after implementing fetch)
-  /* const mockListings = [
-    {
-      id: '1',
-      title: 'Vintage Bicycle',
-      description: 'Well-maintained vintage road bike from the 1980s. Perfect working condition.',
-      price: '$250',
-      location: 'Brooklyn, NY',
-      category: 'Bicycles',
-      createdAt: '2023-11-15',
-      author: {
-        did: 'did:plc:abcdefg',
-        handle: 'seller.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=bicycle'
-    },
-    {
-      id: '2',
-      title: 'iPhone 13 Pro - Excellent Condition',
-      description: 'iPhone 13 Pro 128GB in excellent condition. Includes original box and accessories.',
-      price: '$650',
-      location: 'San Francisco, CA',
-      category: 'Electronics',
-      createdAt: '2023-11-14',
-      author: {
-        did: 'did:plc:hijklmn',
-        handle: 'techseller.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=iphone'
-    },
-    {
-      id: '3',
-      title: 'Modern Coffee Table',
-      description: 'Sleek modern coffee table with glass top and wooden legs. Barely used.',
-      price: '$120',
-      location: 'Austin, TX',
-      category: 'Furniture',
-      createdAt: '2023-11-13',
-      author: {
-        did: 'did:plc:opqrstu',
-        handle: 'homeseller.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=table'
-    },
-    {
-      id: '4',
-      title: 'Web Development Services',
-      description: 'Professional web development services. Specializing in React, Next.js, and Node.',
-      price: '$75/hr',
-      location: 'Remote',
-      category: 'Services',
-      createdAt: '2023-11-12',
-      author: {
-        did: 'did:plc:vwxyz',
-        handle: 'developer.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=coding'
-    },
-    {
-      id: '5',
-      title: 'Mountain Bike - Trek',
-      description: 'Trek mountain bike in great condition. Recently serviced with new brakes and tires.',
-      price: '$400',
-      location: 'Denver, CO',
-      category: 'Bicycles',
-      createdAt: '2023-11-11',
-      author: {
-        did: 'did:plc:123456',
-        handle: 'bikerider.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=mountain+bike'
-    },
-    {
-      id: '6',
-      title: 'Apartment for Rent - 2BR',
-      description: 'Spacious 2-bedroom apartment available for rent. Utilities included, pet-friendly.',
-      price: '$1,800/mo',
-      location: 'Chicago, IL',
-      category: 'Housing',
-      createdAt: '2023-11-10',
-      author: {
-        did: 'did:plc:789012',
-        handle: 'landlord.bsky.social',
-      },
-      image: '/placeholder.svg?width=400&height=300&query=apartment'
-    },
-  ]; */
+  // Handle filter changes from the ListingFilters component
+  const handleFilterChange = (filterName: string, value: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      [filterName]: value,
+    }));
+    
+    // Reset geo error when changing location filter
+    if (filterName === 'location') {
+      setGeoError(null);
+    }
+    
+    // Default to list view when filters change
+    if (geoError && viewMode === 'map') {
+      setViewMode('list');
+    }
+  };
+
+  // Fetch listings from the Bluesky API
+  const fetchListings = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (!agent.session) {
+        setError('Please log in to view listings');
+        setLoading(false);
+        return;
+      }
+
+      // Get the timeline
+      const response = await agent.getTimeline({ limit: 100 });
+
+      // Filter posts that have the listing schema
+      const listingPosts = response.data.feed.filter(
+        (post) =>
+          post.reason?.$type !== 'app.bsky.feed.defs#reasonRepost' &&
+          post.post.record.$type === 'app.bsky.feed.post' &&
+          (post.post.record as any).listing
+      ) as ListingPost[];
+
+      setListings(listingPosts);
+      setFilteredListings(listingPosts);
+    } catch (err) {
+      console.error('Error fetching listings:', err);
+      setError('Failed to load listings. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Map listings to the format expected by MapView
+  const mapListings = filteredListings.map((post) => {
+    const listing = post.record.listing;
+    if (!listing) return null;
+
+    // Extract coordinates if available (will be added by the geolocation service)
+    let coordinates;
+    try {
+      // In a real app, you would store coordinates with the listing
+      // For this demo, we'll use a placeholder
+      if (listing.location?.zipCode) {
+        // This would normally come from your database or API
+        // Here we're just creating a placeholder
+        coordinates = { lat: 0, lng: 0 }; // Will be populated by MapView component
+      }
+    } catch (error) {
+      console.error('Error processing coordinates:', error);
+    }
+
+    return {
+      id: post.post.uri,
+      uri: post.post.uri,
+      title: listing.title,
+      description: listing.description,
+      price: listing.price,
+      category: listing.category || 'Uncategorized',
+      location: {
+        zipCode: listing.location?.zipCode || '',
+        address: listing.location?.address,
+        coordinates
+      }
+    };
+  }).filter(Boolean);
+
+  // Handle view mode toggle
+  const toggleViewMode = (mode: 'list' | 'map') => {
+    // If there's a geo error, don't allow switching to map view
+    if (mode === 'map' && geoError) {
+      toast({
+        variant: "destructive",
+        title: "Map Unavailable",
+        description: "Map view is currently unavailable due to location service issues"
+      });
+      return;
+    }
+    setViewMode(mode);
+  };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start gap-6">
-        <div className="w-full md:w-1/4 sticky top-20">
-          <ListingFilters onFilterChange={handleFilterChange} />
-        </div>
-        
-        <div className="w-full md:w-3/4">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold">Browse Listings</h1>
-            <Button asChild>
-              <Link href="/listings/new">Create Listing</Link>
+    <div className="container mx-auto py-8 px-4">
+      <ListingFilters
+        onFilterChange={handleFilterChange}
+        filters={filters}
+        geoError={geoError !== null}
+        isLoading={loading}
+      />
+
+      <div className="flex justify-between items-center mb-6 mt-8">
+        <h1 className="text-2xl font-bold">Browse Listings</h1>
+        <div className="flex space-x-2">
+          <div className="bg-gray-100 rounded-lg p-1 flex">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => toggleViewMode('list')}
+              className="rounded-md"
+            >
+              List View
+            </Button>
+            <Button
+              variant={viewMode === 'map' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => toggleViewMode('map')}
+              className="rounded-md"
+              disabled={geoError !== null}
+            >
+              Map View
             </Button>
           </div>
-          
-          {isLoading && <p className="text-center text-muted-foreground my-4">Loading listings...</p>}
-          {error && (
-            <div className="text-center my-8 p-6 border rounded-lg">
-              <p className="text-red-500 mb-4">{error}</p>
-              {error.includes('log in') && (
-                <Button asChild>
-                  <Link href="/auth/login">Sign in with Bluesky</Link>
-                </Button>
-              )}
-            </div>
-          )}
-          {!isLoading && !error && listings.length === 0 && (
-            <p className="text-center text-muted-foreground my-4">No listings found matching 'app.bsky.feed.listing' in this feed.</p>
-          )}
-          {!isLoading && !error && listings.length > 0 && filteredListings.length === 0 && (
-            <p className="text-center text-muted-foreground my-4">No listings match the current filters.</p>
-          )}
-          {!isLoading && !error && filteredListings.length > 0 && (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {filteredListings.map(({ post }) => {
-                // Placeholder image - replace with actual image handling later if needed
-                const imageUrl = `/placeholder.svg?width=400&height=300&query=${encodeURIComponent(post.record.category || 'listing')}`;
-                return (
-                  <Card key={post.uri} className="overflow-hidden flex flex-col h-full">
-                    <div className="aspect-video relative overflow-hidden">
-                      <img 
-                        src={imageUrl} 
-                        alt={post.record.title}
-                        className="object-cover w-full h-full transition-transform hover:scale-105"
-                      />
-                    </div>
-                    <CardHeader>
-                      <CardTitle className="line-clamp-1">{post.record.title}</CardTitle>
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-lg">{post.record.price || 'N/A'}</span>
-                        <span className="text-sm text-muted-foreground">{post.record.location || 'Unknown Location'}</span>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow">
-                      <p className="text-muted-foreground line-clamp-2">{post.record.description}</p>
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        {post.record.category && <span className="text-xs px-2 py-1 bg-secondary rounded-full">{post.record.category}</span>}
-                        <span className="text-xs text-muted-foreground">Posted {new Date(post.record.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="border-t pt-4">
-                      <div className="flex justify-between items-center w-full">
-                         <Link href={`https://bsky.app/profile/${post.author.handle}`} target="_blank" rel="noopener noreferrer" className="text-sm hover:underline">
-                           @{post.author.handle}
-                         </Link>
-                        {/* Link to the detailed view page */}
-                         <Button variant="outline" size="sm" asChild>
-                           <Link href={`/listings/${encodeURIComponent(post.uri)}`}>View Details</Link>
-                         </Button>
-                      </div>
-                    </CardFooter>
-                  </Card>
-                )}
-              )}
-            </div>
-          )}
+          <Button asChild>
+            <Link href="/listings/new">Create Listing</Link>
+          </Button>
         </div>
       </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-10">
+          <p className="text-red-500">{error}</p>
+          {error === 'Please log in to view listings' && (
+            <Button asChild className="mt-4">
+              <Link href="/auth/login">Log In</Link>
+            </Button>
+          )}
+        </div>
+      ) : filteredListings.length === 0 ? (
+        <div className="text-center py-10">
+          <p>No listings match your filters.</p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => {
+              setFilters({
+                category: '',
+                minPrice: '',
+                maxPrice: '',
+                location: '',
+                radius: '',
+              });
+              setGeoError(null);
+            }}
+          >
+            Clear Filters
+          </Button>
+        </div>
+      ) : (
+        <>
+          {viewMode === 'map' ? (
+            <MapView
+              listings={mapListings}
+              centerZipCode={filters.location || undefined}
+              radius={filters.radius ? parseFloat(filters.radius) : undefined}
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredListings.map((post) => (
+                <Card
+                  key={post.post.uri}
+                  uri={post.post.uri}
+                  title={post.record.listing?.title || 'Untitled Listing'}
+                  price={post.record.listing?.price}
+                  description={post.record.listing?.description || ''}
+                  category={post.record.listing?.category}
+                  author={{
+                    did: post.post.author.did,
+                    handle: post.post.author.handle,
+                    displayName: post.post.author.displayName,
+                    avatar: post.post.author.avatar,
+                  }}
+                  createdAt={post.post.indexedAt}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -58,3 +58,17 @@ export async function logout() {
     agent.session = undefined;
   }
 }
+
+export async function searchPosts(query: string) {
+  try {
+    const agent = getAgent();
+    const result = await agent.app.bsky.feed.searchPosts({ q: query });
+    return { success: true, data: result.data };
+  } catch (error) {
+    console.error('Search error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error during search'
+    };
+  }
+}

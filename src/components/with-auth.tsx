@@ -39,7 +39,7 @@ export function withAuth<P extends WithAuthProps>(WrappedComponent: ComponentTyp
   };
 
   // Set a display name for easier debugging
-  ComponentWithAuth.displayName = `WithAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'});
+  ComponentWithAuth.displayName = `WithAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
 
   return ComponentWithAuth;
 }

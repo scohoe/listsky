@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { getAgent, getCurrentSession } from '@/lib/atproto';
+import { getAgent, searchPosts } from '@/lib/atproto';
 
 // Predefined categories for listings
 const CATEGORIES = [
@@ -105,36 +105,29 @@ export default function SearchPage() {
   // Fetch listings
   useEffect(() => {
     const fetchListings = async () => {
+      if (!initialKeywords) {
+        setListings([]);
+        setFilteredListings([]);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
-      setListings([]); // Clear previous listings
 
       try {
-        const agent = getAgent();
-        const session = await getCurrentSession();
+        const result = await searchPosts(initialKeywords);
 
-        if (!session) {
-          // For a public search page, we might fetch a general feed or popular listings
-          setError('Please log in to search listings');
-          setIsLoading(false);
-          return;
+        if (result.success && result.data) {
+          // Filter for posts that match our listing schema NSID
+          const listingPosts = result.data.posts.filter(
+            (item): item is ListingPost =>
+              AppBskyFeedDefs.isFeedViewPost(item) &&
+              item.post.record?.$type === 'app.bsky.feed.listing'
+          );
+          setListings(listingPosts);
         } else {
-          // Fetch a global feed or timeline for searching
-          const response = await agent.app.bsky.feed.getTimeline({
-            limit: 100, // Fetch more to ensure we get diverse listings
-          });
-
-          if (response.success) {
-            // Filter for posts that match our listing schema NSID
-            const listingPosts = response.data.feed.filter(
-              (item): item is ListingPost =>
-                AppBskyFeedDefs.isFeedViewPost(item) &&
-                item.post.record?.$type === 'app.bsky.feed.listing'
-            );
-            setListings(listingPosts);
-          } else {
-            setError('Failed to fetch listings.');
-          }
+          setError(result.error || 'Failed to fetch listings.');
         }
       } catch (err) {
         console.error('Error fetching listings:', err);
@@ -145,7 +138,7 @@ export default function SearchPage() {
     };
 
     fetchListings();
-  }, []); // Only fetch on initial load
+  }, [initialKeywords]); // Re-fetch when keywords change
 
   // Apply filters to listings
   useEffect(() => {

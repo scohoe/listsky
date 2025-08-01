@@ -86,6 +86,17 @@ const NewListingPage = () => {
         throw new Error('Agent session not found. Please try logging in again.');
       }
 
+      // Get coordinates for the ZIP code
+      let coordinates = null;
+      try {
+        // Import the getZipCodeCoordinates function
+        const { getZipCodeCoordinates } = await import('@/lib/geo-utils');
+        coordinates = await getZipCodeCoordinates(formData.zipCode);
+      } catch (error) {
+        console.error('Error getting coordinates for ZIP code:', error);
+        // Continue without coordinates - they're optional
+      }
+
       const uploadedImageBlobs: { alt: string; image: { $type: string; ref: { $link: string }; mimeType: string; size: number } }[] = [];
       if (selectedFiles) {
         for (const file of Array.from(selectedFiles)) {
@@ -117,6 +128,11 @@ const NewListingPage = () => {
         location: {
           zipCode: formData.zipCode,
           address: formData.address || undefined,
+          // Add latitude and longitude if available
+          ...(coordinates ? {
+            latitude: coordinates.lat,
+            longitude: coordinates.lng
+          } : {})
         },
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag).length > 0 ? 
               formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : undefined,
@@ -275,7 +291,7 @@ const NewListingPage = () => {
                   Allow direct messages for this listing
                 </Label>
               </div>
-              <AddIntegration category="ai" /> {/* Placeholder for potential AI integration for description/tags */}
+              {/* Placeholder for potential AI integration for description/tags */}
               <Button type="submit" disabled={isSubmitting} className="w-full">
                 {isSubmitting ? 'Submitting...' : 'Create Listing'}
               </Button>
