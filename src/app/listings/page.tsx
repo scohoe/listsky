@@ -312,106 +312,139 @@ export default function ListingsPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <ListingFilters
-        onFilterChange={handleFilterChange}
-        filters={filters}
-        geoError={geoError !== null}
-        isLoading={loading}
-      />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="container mx-auto py-8 px-4">
+        <ListingFilters
+          onFilterChange={handleFilterChange}
+          filters={filters}
+          geoError={geoError !== null}
+          isLoading={loading}
+        />
 
-      <div className="flex justify-between items-center mb-6 mt-8">
-        <h1 className="text-2xl font-bold">Browse Listings</h1>
-        <div className="flex space-x-2">
-          <div className="bg-gray-100 rounded-lg p-1 flex">
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => toggleViewMode('list')}
-              className="rounded-md"
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 mt-8 gap-4">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Browse Listings
+            </h1>
+            <p className="text-gray-600 mt-2">Discover amazing items from the Bluesky community</p>
+          </div>
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-1 flex shadow-lg border border-gray-200">
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => toggleViewMode('list')}
+                className={`rounded-lg transition-all duration-200 ${
+                  viewMode === 'list' 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md' 
+                    : 'hover:bg-gray-100'
+                }`}
+              >
+                List View
+              </Button>
+              <Button
+                variant={viewMode === 'map' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => toggleViewMode('map')}
+                className={`rounded-lg transition-all duration-200 ${
+                  viewMode === 'map' 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md' 
+                    : 'hover:bg-gray-100'
+                }`}
+                disabled={geoError !== null}
+              >
+                Map View
+              </Button>
+            </div>
+            <Button 
+              asChild 
+              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
             >
-              List View
-            </Button>
-            <Button
-              variant={viewMode === 'map' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => toggleViewMode('map')}
-              className="rounded-md"
-              disabled={geoError !== null}
-            >
-              Map View
+              <Link href="/listings/new">Create Listing</Link>
             </Button>
           </div>
-          <Button asChild>
-            <Link href="/listings/new">Create Listing</Link>
-          </Button>
         </div>
-      </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      ) : error ? (
-        <div className="text-center py-10">
-          <p className="text-red-500">{error}</p>
-          {error === 'Please log in to view listings' && (
-            <Button asChild className="mt-4">
-              <Link href="/auth/login">Log In</Link>
-            </Button>
-          )}
-        </div>
-      ) : filteredListings.length === 0 ? (
-        <div className="text-center py-10">
-          <p>No listings match your filters.</p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => {
-              setFilters({
-                category: '',
-                minPrice: '',
-                maxPrice: '',
-                location: '',
-                radius: '',
-              });
-              setGeoError(null);
-            }}
-          >
-            Clear Filters
-          </Button>
-        </div>
-      ) : (
-        <>
-          {viewMode === 'map' ? (
-            <MapView
-              listings={mapListings}
-              centerZipCode={filters.location || undefined}
-              radius={filters.radius ? parseFloat(filters.radius) : undefined}
-            />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredListings.map((post) => (
-                <Card
-                  key={post.post.uri}
-                  uri={post.post.uri}
-                  title={post.record.listing?.title || 'Untitled Listing'}
-                  price={post.record.listing?.price}
-                  description={post.record.listing?.description || ''}
-                  category={post.record.listing?.category}
-                  author={{
-                    did: post.post.author.did,
-                    handle: post.post.author.handle,
-                    displayName: post.post.author.displayName,
-                    avatar: post.post.author.avatar,
-                  }}
-                  createdAt={post.post.indexedAt}
-                />
-              ))}
+        {loading ? (
+          <div className="flex flex-col justify-center items-center h-64 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-lg">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+            <p className="text-gray-600 font-medium">Loading amazing listings...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-lg">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
+              <p className="text-red-600 font-medium mb-4">{error}</p>
+              {error === 'Please log in to view listings' && (
+                <Button 
+                  asChild 
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <Link href="/auth/login">Log In</Link>
+                </Button>
+              )}
             </div>
-          )}
-        </>
-      )}
+          </div>
+        ) : filteredListings.length === 0 ? (
+          <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-lg">
+            <div className="max-w-md mx-auto">
+              <div className="bg-gray-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                <span className="text-4xl">🔍</span>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">No listings found</h3>
+              <p className="text-gray-600 mb-6">No listings match your current filters. Try adjusting your search criteria.</p>
+              <Button
+                variant="outline"
+                className="border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                onClick={() => {
+                  setFilters({
+                    category: '',
+                    minPrice: '',
+                    maxPrice: '',
+                    location: '',
+                    radius: '',
+                  });
+                  setGeoError(null);
+                }}
+              >
+                Clear All Filters
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {viewMode === 'map' ? (
+              <div className="bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+                <MapView
+                  listings={mapListings}
+                  centerZipCode={filters.location || undefined}
+                  radius={filters.radius ? parseFloat(filters.radius) : undefined}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {filteredListings.map((post) => (
+                  <Card
+                    key={post.post.uri}
+                    uri={post.post.uri}
+                    title={post.record.listing?.title || 'Untitled Listing'}
+                    price={post.record.listing?.price}
+                    description={post.record.listing?.description || ''}
+                    category={post.record.listing?.category}
+                    author={{
+                      did: post.post.author.did,
+                      handle: post.post.author.handle,
+                      displayName: post.post.author.displayName,
+                      avatar: post.post.author.avatar,
+                    }}
+                    createdAt={post.post.indexedAt}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
     </div>
   );
 }

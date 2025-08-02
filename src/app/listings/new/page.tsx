@@ -290,76 +290,204 @@ const NewListingPage = () => {
 
   return (
     <CodeProject id="new-listing-form">
-      <div className="container mx-auto py-8 px-4 md:px-6 max-w-2xl">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-3xl font-bold tracking-tight">Create New Listing</CardTitle>
-            <CardDescription>Fill out the details below to post your item or service.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <Label htmlFor="title">Title</Label>
-                <Input id="title" name="title" value={formData.title} onChange={handleChange} required maxLength={300} />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="container mx-auto py-8 px-4 md:px-6 max-w-3xl">
+          <Card className="bg-white/80 backdrop-blur-sm border border-gray-200 shadow-xl">
+            <CardHeader className="text-center pb-6">
+              <div className="mx-auto w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl text-white">📝</span>
               </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea id="description" name="description" value={formData.description} onChange={handleChange} required rows={5} maxLength={3000} />
+              <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Create New Listing
+              </CardTitle>
+              <CardDescription className="text-lg text-gray-600 mt-2">
+                Share your item or service with the Bluesky community
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-8">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="space-y-2">
+                <Label htmlFor="title" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="text-blue-600">✨</span> Title
+                </Label>
+                <Input 
+                  id="title" 
+                  name="title" 
+                  value={formData.title} 
+                  onChange={handleChange} 
+                  required 
+                  maxLength={300}
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200 text-lg"
+                  placeholder="What are you listing?"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="text-green-600">📄</span> Description
+                </Label>
+                <Textarea 
+                  id="description" 
+                  name="description" 
+                  value={formData.description} 
+                  onChange={handleChange} 
+                  required 
+                  rows={5} 
+                  maxLength={3000}
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200 resize-none"
+                  placeholder="Describe your item or service in detail..."
+                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="price">Price</Label>
-                  <Input id="price" name="price" value={formData.price} onChange={handleChange} placeholder="e.g., $100, Free, Negotiable" maxLength={50} />
+                <div className="space-y-2">
+                  <Label htmlFor="price" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <span className="text-emerald-600">💰</span> Price
+                  </Label>
+                  <Input 
+                    id="price" 
+                    name="price" 
+                    value={formData.price} 
+                    onChange={handleChange} 
+                    placeholder="e.g., $100, Free, Negotiable" 
+                    maxLength={50}
+                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                  />
                 </div>
-                <div>
-                  <Label htmlFor="category">Category</Label>
-                  <Input id="category" name="category" value={formData.category} onChange={handleChange} placeholder="e.g., Electronics, Furniture" maxLength={100} />
+                <div className="space-y-2">
+                  <Label htmlFor="category" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <span className="text-purple-600">🏷️</span> Category
+                  </Label>
+                  <Input 
+                    id="category" 
+                    name="category" 
+                    value={formData.category} 
+                    onChange={handleChange} 
+                    placeholder="e.g., Electronics, Furniture" 
+                    maxLength={100}
+                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                  />
                 </div>
               </div>
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Location</legend>
-                <div>
-                  <Label htmlFor="zipCode">ZIP Code</Label>
-                  <Input id="zipCode" name="zipCode" value={formData.zipCode} onChange={handleChange} required maxLength={10} />
-                </div>
-                <div>
-                  <Label htmlFor="address">Address / General Area (Optional)</Label>
-                  <Input id="address" name="address" value={formData.address} onChange={handleChange} maxLength={200} />
+              <fieldset className="space-y-4 p-4 bg-gray-50/50 rounded-xl border border-gray-200">
+                <legend className="text-sm font-semibold text-gray-700 flex items-center gap-2 px-2">
+                  <span className="text-red-600">📍</span> Location
+                </legend>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="zipCode" className="text-sm font-medium text-gray-600">ZIP Code</Label>
+                    <Input 
+                      id="zipCode" 
+                      name="zipCode" 
+                      value={formData.zipCode} 
+                      onChange={handleChange} 
+                      required 
+                      maxLength={10}
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                      placeholder="12345"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="text-sm font-medium text-gray-600">Address / General Area (Optional)</Label>
+                    <Input 
+                      id="address" 
+                      name="address" 
+                      value={formData.address} 
+                      onChange={handleChange} 
+                      maxLength={200}
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                      placeholder="Downtown, Near park, etc."
+                    />
+                  </div>
                 </div>
               </fieldset>
-              <div>
-                <Label htmlFor="tags">Tags (comma-separated)</Label>
-                <Input id="tags" name="tags" value={formData.tags} onChange={handleChange} placeholder="e.g., vintage, handmade, local" />
+              <div className="space-y-2">
+                <Label htmlFor="tags" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="text-orange-600">🏷️</span> Tags (comma-separated)
+                </Label>
+                <Input 
+                  id="tags" 
+                  name="tags" 
+                  value={formData.tags} 
+                  onChange={handleChange} 
+                  placeholder="e.g., vintage, handmade, local, urgent"
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                />
+                <p className="text-xs text-gray-500">Add relevant tags to help people find your listing</p>
               </div>
-              <div>
-                <Label htmlFor="images">Images (up to 4)</Label>
-                <Input id="images" name="images" type="file" multiple accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleFileChange} />
+              <div className="space-y-3">
+                <Label htmlFor="images" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="text-pink-600">📸</span> Images (up to 4)
+                </Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors duration-200">
+                  <Input 
+                    id="images" 
+                    name="images" 
+                    type="file" 
+                    multiple 
+                    accept="image/jpeg,image/png,image/gif,image/webp" 
+                    onChange={handleFileChange}
+                    className="border-0 p-0 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all duration-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">Upload clear, well-lit photos of your item</p>
+                </div>
                 {imagePreviews.length > 0 && (
-                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {imagePreviews.map((src, index) => (
-                      <img key={index} src={src} alt={`Preview ${index + 1}`} className="rounded-md object-cover h-24 w-full" />
+                      <div key={index} className="relative group">
+                        <img 
+                          src={src} 
+                          alt={`Preview ${index + 1}`} 
+                          className="rounded-xl object-cover h-24 w-full border-2 border-gray-200 group-hover:border-blue-300 transition-all duration-200" 
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-xl transition-all duration-200" />
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="allowDirectMessage" name="allowDirectMessage" checked={formData.allowDirectMessage} onCheckedChange={(checked) => setFormData(prev => ({...prev, allowDirectMessage: !!checked}))} />
-                <Label htmlFor="allowDirectMessage" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Allow direct messages for this listing
+              <div className="flex items-center space-x-3 p-4 bg-blue-50/50 rounded-xl border border-blue-200">
+                <Checkbox 
+                  id="allowDirectMessage" 
+                  name="allowDirectMessage" 
+                  checked={formData.allowDirectMessage} 
+                  onCheckedChange={(checked) => setFormData(prev => ({...prev, allowDirectMessage: !!checked}))}
+                  className="border-blue-300 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                />
+                <Label htmlFor="allowDirectMessage" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  <span className="flex items-center gap-2">
+                    <span className="text-blue-600">💬</span>
+                    Allow direct messages for this listing
+                  </span>
                 </Label>
               </div>
-              {/* Placeholder for potential AI integration for description/tags */}
-              <Button type="submit" disabled={isSubmitting} className="w-full">
-                {isSubmitting ? 'Submitting...' : 'Create Listing'}
+              
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating Listing...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <span>✨</span>
+                    Create Listing
+                  </span>
+                )}
               </Button>
             </form>
-          </CardContent>
-          <CardFooter>
-            <p className="text-xs text-muted-foreground">
-              By submitting, you agree to our terms and conditions (not yet implemented).
-            </p>
-          </CardFooter>
-        </Card>
+            </CardContent>
+            <CardFooter className="px-8 pb-8">
+              <div className="w-full text-center">
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+                  <span className="font-medium">📋 Note:</span> By submitting, you agree to our terms and conditions. Your listing will be visible to the Bluesky community.
+                </p>
+              </div>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
     </CodeProject>
   );
