@@ -25,25 +25,39 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const agentInstance = getAgent();
+  const [agent, setAgent] = useState<BskyAgent | null>(null);
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Start with loading true to check for session
 
+  // Initialize agent
+  useEffect(() => {
+    const initAgent = async () => {
+      const agentInstance = await getAgent();
+      setAgent(agentInstance);
+    };
+    initAgent();
+  }, []);
+
   const login = async (identifier: string, appPassword: string) => {
     setIsLoading(true);
-    const result = await apiLogin(identifier, appPassword);
-    if (result.success && result.data) {
-      const currentSession = await apiGetCurrentSession();
-      setSession(currentSession as UserSession);
-      // Store session in localStorage for persistence
-      if (currentSession && typeof window !== 'undefined') {
-        localStorage.setItem('bsky_session', JSON.stringify(currentSession));
+    try {
+      const result = await apiLogin(identifier, appPassword);
+      if (result) {
+        const currentSession = await apiGetCurrentSession();
+        setSession(currentSession as UserSession);
+        // Store session in localStorage for persistence
+        if (currentSession && typeof window !== 'undefined') {
+          localStorage.setItem('bsky_session', JSON.stringify(currentSession));
+        }
+        setIsLoading(false);
+        return { success: true };
+      } else {
+        setIsLoading(false);
+        return { success: false, error: 'Login failed' };
       }
+    } catch (error) {
       setIsLoading(false);
-      return { success: true };
-    } else {
-      setIsLoading(false);
-      return { success: false, error: result.error };
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
     }
   };
 
@@ -68,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const parsedSession = JSON.parse(storedSession);
             // Try to resume the stored session with the agent
-            const agent = getAgent();
+            const agent = await getAgent();
             const resumeResult = await agent.resumeSession(parsedSession);
             if (resumeResult.success && agent.session) {
               setSession(agent.session as UserSession);
@@ -118,8 +132,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resumeSession();
   }, []);
 
+  if (!agent) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <AuthContext.Provider value={{ agent: agentInstance, session, isLoading, login, logout, resumeSession }}>
+    <AuthContext.Provider value={{ agent, session, isLoading, login, logout, resumeSession }}>
       {children}
     </AuthContext.Provider>
   );

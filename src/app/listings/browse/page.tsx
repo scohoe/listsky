@@ -85,7 +85,7 @@ const ListingsPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const agent = getAgent(); // No auth needed for public feeds generally
+      const agent = await getAgent(); // No auth needed for public feeds generally
       // We need to list records from many users, so we can't use listRecords on a single repo.
       // Instead, we'd typically use a feed generator or search service that indexes these custom posts.
       // For this example, we'll simulate by fetching recent posts from a known user or a broader feed if possible.

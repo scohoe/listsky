@@ -112,7 +112,7 @@ const ListingDetailPage = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const agent = getAgent();
+        const agent = await getAgent();
         // A full AT URI looks like: at://{did}/{collection}/{rkey}
         // We need to parse this to use com.atproto.repo.getRecord
         const parts = atUri.match(/^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);

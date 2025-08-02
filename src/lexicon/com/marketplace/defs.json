@@ -1,0 +1,105 @@
+{
+  "lexicon": 1,
+  "id": "com.marketplace.defs",
+  "defs": {
+    "location": {
+      "type": "object",
+      "description": "Location information for marketplace listings",
+      "required": ["zipCode"],
+      "properties": {
+        "zipCode": {
+          "type": "string",
+          "maxLength": 10,
+          "description": "ZIP code or postal code"
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Specific address or general area"
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "City name"
+        },
+        "state": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "State or province"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude coordinate for mapping"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude coordinate for mapping"
+        }
+      }
+    },
+    "listingStatus": {
+      "type": "string",
+      "enum": ["active", "sold", "expired", "draft"],
+      "description": "Current status of the listing"
+    },
+    "condition": {
+      "type": "string",
+      "enum": ["new", "like-new", "good", "fair", "poor"],
+      "description": "Condition of the item being sold"
+    },
+    "listingRef": {
+      "type": "object",
+      "description": "Reference to a marketplace listing",
+      "required": ["uri"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the listing record"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "Content identifier of the listing"
+        }
+      }
+    },
+    "userProfile": {
+      "type": "object",
+      "description": "Marketplace-specific user profile information",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name for marketplace"
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Seller bio or description"
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Whether the seller is verified",
+          "default": false
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the user joined the marketplace"
+        },
+        "rating": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Average seller rating"
+        },
+        "totalSales": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of completed sales"
+        }
+      }
+    }
+  }
+}

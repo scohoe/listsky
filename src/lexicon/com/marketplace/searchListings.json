@@ -1,0 +1,177 @@
+{
+  "lexicon": 1,
+  "id": "com.marketplace.searchListings",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Search marketplace listings with text query and filters",
+      "parameters": {
+        "type": "params",
+        "required": ["q"],
+        "properties": {
+          "q": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Search query text"
+          },
+          "category": {
+            "type": "string",
+            "description": "Filter by category"
+          },
+          "location": {
+            "type": "string",
+            "description": "Location filter (ZIP code, city, or coordinates)"
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 25,
+            "description": "Search radius in miles for location-based search"
+          },
+          "minPrice": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Minimum price filter"
+          },
+          "maxPrice": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Maximum price filter"
+          },
+          "condition": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["new", "like-new", "good", "fair", "poor"]
+            },
+            "description": "Filter by item conditions"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "maxLength": 10,
+            "description": "Filter by tags"
+          },
+          "hasImages": {
+            "type": "boolean",
+            "description": "Filter listings that have images"
+          },
+          "postedSince": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Filter listings posted since this date"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 25,
+            "description": "Number of results to return"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor"
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": ["relevance", "createdAt", "price", "distance"],
+            "default": "relevance",
+            "description": "Sort results by"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "default": "desc",
+            "description": "Sort order"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["listings", "total"],
+          "properties": {
+            "listings": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "lex:com.marketplace.getListings#listingView"
+              }
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total number of matching listings"
+            },
+            "cursor": {
+              "type": "string",
+              "description": "Pagination cursor for next page"
+            },
+            "facets": {
+              "type": "object",
+              "description": "Search facets for filtering",
+              "properties": {
+                "categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "ref",
+                    "ref": "#facetCount"
+                  }
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "ref",
+                    "ref": "#facetCount"
+                  }
+                },
+                "priceRanges": {
+                  "type": "array",
+                  "items": {
+                    "type": "ref",
+                    "ref": "#priceRange"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "facetCount": {
+      "type": "object",
+      "required": ["value", "count"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "Facet value"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of listings with this value"
+        }
+      }
+    },
+    "priceRange": {
+      "type": "object",
+      "required": ["min", "max", "count"],
+      "properties": {
+        "min": {
+          "type": "number",
+          "description": "Minimum price in range"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum price in range"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of listings in this price range"
+        }

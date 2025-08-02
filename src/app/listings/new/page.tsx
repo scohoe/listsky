@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, ChangeEvent, FormEvent } from 'react';
+import React, { useState, ChangeEvent, FormEvent, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { withAuth } from '@/components/with-auth';
 import { CodeProject } from '@/components/code-project';
@@ -8,22 +8,33 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { getAgent } from '@/lib/atproto';
+import { getAgent, testConnection, marketplaceConfig } from '@/lib/atproto';
+import { createMarketplaceListing, MarketplaceListing } from '@/lib/marketplace-api';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { X, Upload, AlertCircle, CheckCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ListingFormData {
   title: string;
   description: string;
   price: string;
   category: string;
-  zipCode: string;
-  address: string;
+  condition: 'new' | 'like-new' | 'good' | 'fair' | 'poor' | '';
+  location: {
+    zipCode: string;
+    address: string;
+    city: string;
+    state: string;
+  };
   tags: string; // Comma-separated tags
-  // images will be handled separately
-  allowDirectMessage: boolean;
+  allowMessages: boolean;
+  crossPost: boolean;
+  crossPostText: string;
 }
 
 const NewListingPage = () => {
@@ -35,27 +46,42 @@ const NewListingPage = () => {
     description: '',
     price: '',
     category: '',
-    zipCode: '',
-    address: '',
+    condition: '',
+    location: {
+      zipCode: '',
+      address: '',
+      city: '',
+      state: '',
+    },
     tags: '',
-    allowDirectMessage: false,
+    allowMessages: true,
+    crossPost: true,
+    crossPostText: '',
   });
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]); 
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [errors, setErrors] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const testConnection = async () => {
+  const addDebugInfo = (info: string) => {
+    setDebugInfo(prev => `${prev}\n${new Date().toLocaleTimeString()}: ${info}`);
+    console.log(info);
+  };
+
+  const testConnectionHandler = async () => {
     try {
       console.log('=== TESTING CONNECTION ===');
-      const agent = getAgent();
+      const agent = await getAgent();
       console.log('Agent:', !!agent);
       console.log('Agent session:', !!agent.session);
       console.log('Session DID:', agent.session?.did);
       console.log('Session handle:', agent.session?.handle);
       
       if (!agent.session) {
-        setDebugInfo('❌ No agent session found');
+        addDebugInfo('❌ No agent session found');
         return;
       }
       
@@ -63,7 +89,7 @@ const NewListingPage = () => {
       const profile = await agent.getProfile({ actor: agent.session.did });
       console.log('Profile test result:', profile);
       
-      setDebugInfo(`✅ Connection OK - DID: ${agent.session.did}, Handle: ${agent.session.handle}`);
+      addDebugInfo(`✅ Connection OK - DID: ${agent.session.did}, Handle: ${agent.session.handle}`);
       
       toast({
         title: 'Connection Test',
@@ -71,7 +97,7 @@ const NewListingPage = () => {
       });
     } catch (error) {
       console.error('Connection test failed:', error);
-      setDebugInfo(`❌ Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addDebugInfo(`❌ Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       toast({
         title: 'Connection Test Failed',
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -84,9 +110,22 @@ const NewListingPage = () => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       setFormData((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
+    } else if (name.includes('.')) {
+      const [parent, child] = name.split('.');
+      setFormData((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent as keyof typeof prev] as object,
+          [child]: value,
+        },
+      }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleSelectChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -126,8 +165,15 @@ const NewListingPage = () => {
       return;
     }
     
-    if (!formData.zipCode.trim()) {
+    if (!formData.location.zipCode.trim()) {
       toast({ title: 'Error', description: 'Please enter a ZIP code.', variant: 'destructive' });
+      return;
+    }
+    
+    // Validate zip code format
+    const zipRegex = /^\d{5}(-\d{4})?$/;
+    if (formData.location.zipCode && !zipRegex.test(formData.location.zipCode)) {
+      toast({ title: 'Error', description: 'Zip code must be in format: 12345 or 12345-6789', variant: 'destructive' });
       return;
     }
     
@@ -147,35 +193,90 @@ const NewListingPage = () => {
     });
 
     try {
-      const agent = getAgent();
-      console.log('Agent obtained:', !!agent);
-      console.log('Agent session:', !!agent.session);
+      // Test connection first
+      console.log('Testing connection to AT Protocol...');
+      const connectionTest = await testConnection();
+      if (!connectionTest.success) {
+        throw new Error(`Connection failed: ${connectionTest.error}`);
+      }
+      console.log('✓ Connection test passed');
+      
+      // Get authenticated agent
+      const agent = await getAgent();
+      if (!agent) {
+        throw new Error('No authenticated agent available. Please log in.');
+      }
       
       if (!agent.session) {
-        throw new Error('Agent session not found. Please try logging in again.');
+        throw new Error('No active session. Please log in again.');
       }
-
-      console.log('Starting listing creation process...');
+      console.log(`✓ Agent authenticated as ${agent.session.handle}`);
       
-      // Add timeout wrapper for the entire process
-      const createListingWithTimeout = async () => {
-        return Promise.race([
-          createListingProcess(agent),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Listing creation timed out after 60 seconds')), 60000)
-          )
-        ]);
+      // Prepare marketplace listing data
+      console.log('Preparing marketplace listing...');
+      const marketplaceListing: MarketplaceListing = {
+        title: formData.title,
+        description: formData.description,
+        price: formData.price,
+        category: formData.category,
+        condition: formData.condition || undefined,
+        location: {
+          zipCode: formData.location.zipCode,
+          address: formData.location.address || undefined,
+          city: formData.location.city || undefined,
+          state: formData.location.state || undefined,
+        },
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag).length > 0 ? 
+              formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : undefined,
+        images: selectedFiles && selectedFiles.length > 0 ? Array.from(selectedFiles) : undefined,
+        allowMessages: formData.allowMessages,
+        status: 'active',
       };
-
-      const result = await createListingWithTimeout();
-      console.log('Listing creation completed successfully:', result);
-
+      
+      // Create marketplace listing using the new API
+      console.log('Creating marketplace listing...');
+      const result = await createMarketplaceListing(marketplaceListing, {
+        crossPost: formData.crossPost,
+        crossPostText: formData.crossPostText || undefined,
+      });
+      
+      console.log(`✓ Marketplace listing created: ${result.uri}`);
+      
+      if (result.crossPostUri) {
+        console.log(`✓ Cross-posted to Bluesky: ${result.crossPostUri}`);
+      }
+      
       toast({
-        title: 'Listing Created!',
+        title: marketplaceConfig.enableCustomRecords
+          ? 'Marketplace listing created successfully!'
+          : 'Listing posted to Bluesky successfully!',
         description: 'Your listing has been successfully posted.',
       });
-      console.log('Navigating to /listings/my');
-      router.push('/listings/my');
+      
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        price: '',
+        category: '',
+        condition: '',
+        location: {
+          zipCode: '',
+          address: '',
+          city: '',
+          state: '',
+        },
+        tags: '',
+        allowMessages: true,
+        crossPost: true,
+        crossPostText: '',
+      });
+      setSelectedFiles(null);
+      setImagePreviews([]);
+      setSelectedImages([]);
+      
+      console.log('Navigating to /listings');
+      router.push('/listings');
     } catch (error) {
       console.error('=== ERROR CREATING LISTING ===');
       console.error('Error details:', error);
@@ -213,11 +314,11 @@ const NewListingPage = () => {
     // Get coordinates for the ZIP code
     let coordinates = null;
     try {
-      console.log('Step 1: Getting coordinates for ZIP code:', formData.zipCode);
+      console.log('Step 1: Getting coordinates for ZIP code:', formData.location.zipCode);
       // Import the getZipCodeCoordinates function
       const { getZipCodeCoordinates } = await import('@/lib/geo-utils');
       coordinates = await Promise.race([
-        getZipCodeCoordinates(formData.zipCode),
+        getZipCodeCoordinates(formData.location.zipCode),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Geocoding timeout')), 10000)
         )
@@ -288,8 +389,8 @@ const NewListingPage = () => {
         price: formData.price || undefined,
         category: formData.category || undefined,
         location: {
-          zipCode: formData.zipCode,
-          address: formData.address || undefined,
+          zipCode: formData.location.zipCode,
+          address: formData.location.address || undefined,
           // Add latitude and longitude if available
           ...(coordinates ? {
             latitude: coordinates.lat,
@@ -359,13 +460,13 @@ const NewListingPage = () => {
             price: formData.price || undefined,
             category: formData.category || undefined,
             location: {
-              zipCode: formData.zipCode,
-              address: formData.address || undefined,
+              zipCode: formData.location.zipCode,
+              address: formData.location.address || undefined,
             },
             tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag).length > 0 ? 
                   formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : undefined,
             // images are handled by the main embed if present
-            allowDirectMessage: formData.allowDirectMessage,
+            allowMessages: formData.allowMessages,
         },
         langs: ['en'],
       };
@@ -485,16 +586,40 @@ const NewListingPage = () => {
                   <Label htmlFor="category" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <span className="text-purple-600">🏷️</span> Category
                   </Label>
-                  <Input 
-                    id="category" 
-                    name="category" 
-                    value={formData.category} 
-                    onChange={handleChange} 
-                    placeholder="e.g., Electronics, Furniture" 
-                    maxLength={100}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
-                  />
+                  <Select value={formData.category} onValueChange={(value) => handleSelectChange('category', value)}>
+                    <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200">
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="electronics">Electronics</SelectItem>
+                      <SelectItem value="furniture">Furniture</SelectItem>
+                      <SelectItem value="clothing">Clothing</SelectItem>
+                      <SelectItem value="books">Books</SelectItem>
+                      <SelectItem value="sports">Sports & Recreation</SelectItem>
+                      <SelectItem value="home">Home & Garden</SelectItem>
+                      <SelectItem value="automotive">Automotive</SelectItem>
+                      <SelectItem value="services">Services</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="condition" className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="text-yellow-600">⭐</span> Condition
+                </Label>
+                <Select value={formData.condition} onValueChange={(value) => handleSelectChange('condition', value)}>
+                  <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200">
+                    <SelectValue placeholder="Select condition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="like-new">Like New</SelectItem>
+                    <SelectItem value="good">Good</SelectItem>
+                    <SelectItem value="fair">Fair</SelectItem>
+                    <SelectItem value="poor">Poor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <fieldset className="space-y-4 p-4 bg-gray-50/50 rounded-xl border border-gray-200">
                 <legend className="text-sm font-semibold text-gray-700 flex items-center gap-2 px-2">
@@ -502,11 +627,11 @@ const NewListingPage = () => {
                 </legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="zipCode" className="text-sm font-medium text-gray-600">ZIP Code</Label>
+                    <Label htmlFor="location.zipCode" className="text-sm font-medium text-gray-600">ZIP Code</Label>
                     <Input 
-                      id="zipCode" 
-                      name="zipCode" 
-                      value={formData.zipCode} 
+                      id="location.zipCode" 
+                      name="location.zipCode" 
+                      value={formData.location.zipCode} 
                       onChange={handleChange} 
                       required 
                       maxLength={10}
@@ -515,15 +640,41 @@ const NewListingPage = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="address" className="text-sm font-medium text-gray-600">Address / General Area (Optional)</Label>
+                    <Label htmlFor="location.address" className="text-sm font-medium text-gray-600">Address / General Area (Optional)</Label>
                     <Input 
-                      id="address" 
-                      name="address" 
-                      value={formData.address} 
+                      id="location.address" 
+                      name="location.address" 
+                      value={formData.location.address} 
                       onChange={handleChange} 
                       maxLength={200}
                       className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
                       placeholder="Downtown, Near park, etc."
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="location.city" className="text-sm font-medium text-gray-600">City (Optional)</Label>
+                    <Input 
+                      id="location.city" 
+                      name="location.city" 
+                      value={formData.location.city} 
+                      onChange={handleChange} 
+                      maxLength={100}
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                      placeholder="City name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location.state" className="text-sm font-medium text-gray-600">State (Optional)</Label>
+                    <Input 
+                      id="location.state" 
+                      name="location.state" 
+                      value={formData.location.state} 
+                      onChange={handleChange} 
+                      maxLength={2}
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
+                      placeholder="CA"
                     />
                   </div>
                 </div>
@@ -567,26 +718,69 @@ const NewListingPage = () => {
                           alt={`Preview ${index + 1}`} 
                           className="rounded-xl object-cover h-24 w-full border-2 border-gray-200 group-hover:border-blue-300 transition-all duration-200" 
                         />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-xl transition-all duration-200" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newImages = selectedImages.filter((_, i) => i !== index);
+                            const newPreviews = imagePreviews.filter((_, i) => i !== index);
+                            setSelectedImages(newImages);
+                            setImagePreviews(newPreviews);
+                          }}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="flex items-center space-x-3 p-4 bg-blue-50/50 rounded-xl border border-blue-200">
-                <Checkbox 
-                  id="allowDirectMessage" 
-                  name="allowDirectMessage" 
-                  checked={formData.allowDirectMessage} 
-                  onCheckedChange={(checked) => setFormData(prev => ({...prev, allowDirectMessage: !!checked}))}
-                  className="border-blue-300 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
-                />
-                <Label htmlFor="allowDirectMessage" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  <span className="flex items-center gap-2">
-                    <span className="text-blue-600">💬</span>
-                    Allow direct messages for this listing
-                  </span>
-                </Label>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3 p-4 bg-blue-50/50 rounded-xl border border-blue-200">
+                  <Checkbox 
+                    id="allowMessages" 
+                    name="allowMessages" 
+                    checked={formData.allowMessages} 
+                    onCheckedChange={(checked) => setFormData(prev => ({...prev, allowMessages: !!checked}))}
+                    className="border-blue-300 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                  />
+                  <Label htmlFor="allowMessages" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <span className="text-blue-600">💬</span>
+                      Allow direct messages for this listing
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-3 p-4 bg-green-50/50 rounded-xl border border-green-200">
+                  <Checkbox 
+                    id="crossPost" 
+                    name="crossPost" 
+                    checked={formData.crossPost} 
+                    onCheckedChange={(checked) => setFormData(prev => ({...prev, crossPost: !!checked}))}
+                    className="border-green-300 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"
+                  />
+                  <Label htmlFor="crossPost" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <span className="text-green-600">🔄</span>
+                      Also post to Bluesky feed
+                    </span>
+                  </Label>
+                </div>
+                {formData.crossPost && (
+                  <div className="space-y-2">
+                    <Label htmlFor="crossPostText" className="text-sm font-medium text-gray-600">Custom Bluesky post text (optional)</Label>
+                    <Textarea 
+                      id="crossPostText" 
+                      name="crossPostText" 
+                      value={formData.crossPostText} 
+                      onChange={handleChange} 
+                      rows={3} 
+                      maxLength={300}
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200 resize-none"
+                      placeholder="Custom text for your Bluesky post (leave empty for auto-generated)"
+                    />
+                  </div>
+                )}
               </div>
               
               <Button 

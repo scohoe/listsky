@@ -1,0 +1,124 @@
+{
+  "lexicon": 1,
+  "id": "com.marketplace.getListings",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Get marketplace listings with optional filtering",
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "author": {
+            "type": "string",
+            "format": "did",
+            "description": "Filter by listing author DID"
+          },
+          "category": {
+            "type": "string",
+            "description": "Filter by category"
+          },
+          "location": {
+            "type": "string",
+            "description": "Filter by location (ZIP code or city)"
+          },
+          "minPrice": {
+            "type": "number",
+            "description": "Minimum price filter"
+          },
+          "maxPrice": {
+            "type": "number",
+            "description": "Maximum price filter"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Filter by item condition"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by listing status",
+            "default": "active"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 25,
+            "description": "Number of listings to return"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor"
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": ["createdAt", "updatedAt", "price", "title"],
+            "default": "createdAt",
+            "description": "Sort field"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "default": "desc",
+            "description": "Sort order"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["listings"],
+          "properties": {
+            "listings": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#listingView"
+              }
+            },
+            "cursor": {
+              "type": "string",
+              "description": "Pagination cursor for next page"
+            }
+          }
+        }
+      }
+    },
+    "listingView": {
+      "type": "object",
+      "description": "View of a marketplace listing with metadata",
+      "required": ["uri", "cid", "author", "record", "indexedAt"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the listing record"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "Content identifier"
+        },
+        "author": {
+          "type": "ref",
+          "ref": "lex:com.marketplace.defs#userProfile",
+          "description": "Author profile information"
+        },
+        "record": {
+          "type": "ref",
+          "ref": "lex:com.marketplace.listing",
+          "description": "The listing record"
+        },
+        "indexedAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When this listing was indexed"
+        },
+        "distance": {
+          "type": "number",
+          "description": "Distance from search location in miles (if location-based search)"
+        }
+      }
+    }
+  }
+}

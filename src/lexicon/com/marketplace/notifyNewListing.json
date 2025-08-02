@@ -1,0 +1,79 @@
+{
+  "lexicon": 1,
+  "id": "com.marketplace.notifyNewListing",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Notify AppView of new listing and request indexing",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["listingUri"],
+          "properties": {
+            "listingUri": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "AT-URI of the new listing record"
+            },
+            "crossPost": {
+              "type": "boolean",
+              "description": "Whether to create a cross-post to Bluesky",
+              "default": false
+            },
+            "crossPostText": {
+              "type": "string",
+              "maxLength": 280,
+              "description": "Custom text for the cross-post (optional)"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["indexed"],
+          "properties": {
+            "indexed": {
+              "type": "boolean",
+              "description": "Whether the listing was successfully indexed"
+            },
+            "indexedAt": {
+              "type": "string",
+              "format": "datetime",
+              "description": "When the listing was indexed"
+            },
+            "crossPostUri": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "URI of the created cross-post (if crossPost was true)"
+            },
+            "error": {
+              "type": "string",
+              "description": "Error message if indexing failed"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "ListingNotFound",
+          "description": "The specified listing URI could not be found"
+        },
+        {
+          "name": "InvalidListing",
+          "description": "The listing record is invalid or malformed"
+        },
+        {
+          "name": "IndexingFailed",
+          "description": "Failed to index the listing in the AppView"
+        },
+        {
+          "name": "CrossPostFailed",
+          "description": "Failed to create cross-post to Bluesky"
+        }
+      ]
+    }
+  }
+}

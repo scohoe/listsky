@@ -1,0 +1,118 @@
+{
+  "lexicon": 1,
+  "id": "com.marketplace.listing",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A marketplace listing record stored in user's PDS",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "price",
+          "category",
+          "location",
+          "createdAt"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Title of the listing"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "Detailed description of the item or service"
+          },
+          "price": {
+            "type": "string",
+            "maxLength": 50,
+            "description": "Price (e.g., '$100', 'Free', 'Negotiable')"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Category of the listing"
+          },
+          "condition": {
+            "type": "ref",
+            "ref": "lex:com.marketplace.defs#condition",
+            "description": "Condition of the item"
+          },
+          "location": {
+            "type": "ref",
+            "ref": "lex:com.marketplace.defs#location",
+            "description": "Location information"
+          },
+          "images": {
+            "type": "array",
+            "maxLength": 8,
+            "items": {
+              "type": "blob",
+              "accept": ["image/jpeg", "image/png", "image/gif", "image/webp"],
+              "maxSize": 2000000
+            },
+            "description": "Images of the item (up to 8 images, 2MB each)"
+          },
+          "tags": {
+            "type": "array",
+            "maxLength": 15,
+            "items": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "description": "Tags for searchability"
+          },
+          "status": {
+            "type": "ref",
+            "ref": "lex:com.marketplace.defs#listingStatus",
+            "description": "Current status of the listing",
+            "default": "active"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the listing was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the listing was last updated"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the listing expires (optional)"
+          },
+          "allowMessages": {
+            "type": "boolean",
+            "description": "Whether to allow direct messages",
+            "default": true
+          },
+          "crossPostedTo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "at-uri"
+            },
+            "description": "URIs of cross-posted social media posts"
+          },
+          "viewCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of times the listing has been viewed",
+            "default": 0
+          },
+          "featured": {
+            "type": "boolean",
+            "description": "Whether this is a featured listing",
+            "default": false
+          }
+        }
+      }
+    }
+  }
+}
