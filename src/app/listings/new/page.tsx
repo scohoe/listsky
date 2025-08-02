@@ -86,38 +86,99 @@ const NewListingPage = () => {
         throw new Error('Agent session not found. Please try logging in again.');
       }
 
-      // Get coordinates for the ZIP code
-      let coordinates = null;
-      try {
-        // Import the getZipCodeCoordinates function
-        const { getZipCodeCoordinates } = await import('@/lib/geo-utils');
-        coordinates = await getZipCodeCoordinates(formData.zipCode);
-      } catch (error) {
-        console.error('Error getting coordinates for ZIP code:', error);
-        // Continue without coordinates - they're optional
-      }
+      console.log('Starting listing creation process...');
+      
+      // Add timeout wrapper for the entire process
+      const createListingWithTimeout = async () => {
+        return Promise.race([
+          createListingProcess(agent),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Listing creation timed out after 60 seconds')), 60000)
+          )
+        ]);
+      };
 
-      const uploadedImageBlobs: { alt: string; image: { $type: string; ref: { $link: string }; mimeType: string; size: number } }[] = [];
-      if (selectedFiles) {
-        for (const file of Array.from(selectedFiles)) {
-          const response = await agent.com.atproto.repo.uploadBlob(new Uint8Array(await file.arrayBuffer()), {
-            encoding: file.type,
-          });
+      await createListingWithTimeout();
+
+      toast({
+        title: 'Listing Created!',
+        description: 'Your listing has been successfully posted.',
+      });
+      router.push('/listings/my');
+    } catch (error) {
+      console.error('Error creating listing:', error);
+      toast({
+        title: 'Error Creating Listing',
+        description: error instanceof Error ? error.message : 'An unknown error occurred.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createListingProcess = async (agent: any) => {
+
+    // Get coordinates for the ZIP code
+    let coordinates = null;
+    try {
+      console.log('Getting coordinates for ZIP code:', formData.zipCode);
+      // Import the getZipCodeCoordinates function
+      const { getZipCodeCoordinates } = await import('@/lib/geo-utils');
+      coordinates = await Promise.race([
+        getZipCodeCoordinates(formData.zipCode),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Geocoding timeout')), 10000)
+        )
+      ]);
+      console.log('Coordinates obtained:', coordinates);
+    } catch (error) {
+      console.error('Error getting coordinates for ZIP code:', error);
+      // Continue without coordinates - they're optional
+    }
+
+    const uploadedImageBlobs: { alt: string; image: { $type: string; ref: { $link: string }; mimeType: string; size: number } }[] = [];
+    if (selectedFiles) {
+      console.log('Uploading', selectedFiles.length, 'images...');
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        console.log(`Uploading image ${i + 1}/${selectedFiles.length}:`, file.name, file.size, 'bytes');
+        
+        try {
+          // Add timeout for individual image uploads
+          const uploadPromise = agent.com.atproto.repo.uploadBlob(
+            new Uint8Array(await file.arrayBuffer()), 
+            { encoding: file.type }
+          );
+          
+          const response = await Promise.race([
+            uploadPromise,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error(`Image upload timeout for ${file.name}`)), 30000)
+            )
+          ]);
+          
           if (response.success) {
+            console.log(`Image ${i + 1} uploaded successfully:`, response.data.blob.ref);
             uploadedImageBlobs.push({ 
               alt: formData.title || 'Listing image', 
               image: { 
-                $type: 'blob', // Correctly identify as a blob reference
+                $type: 'blob',
                 ref: { $link: response.data.blob.ref.toString() }, 
                 mimeType: response.data.blob.mimeType, 
                 size: response.data.blob.size 
               }
             });
           } else {
-            throw new Error('Image upload failed.');
+            throw new Error(`Image upload failed for ${file.name}: ${JSON.stringify(response)}`);
           }
+        } catch (uploadError) {
+          console.error(`Failed to upload image ${file.name}:`, uploadError);
+          throw new Error(`Failed to upload image ${file.name}: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
         }
       }
+      console.log('All images uploaded successfully');
+    }
 
       const recordToCreate = {
         // $type: 'app.bsky.feed.listing', // This is the type of our custom record data
@@ -208,27 +269,23 @@ const NewListingPage = () => {
         langs: ['en'],
       };
 
-      await agent.com.atproto.repo.createRecord({
-        repo: agent.session.did,
-        collection: 'app.bsky.feed.post', 
-        record: finalRecord,
-      });
-
-      toast({
-        title: 'Listing Created!',
-        description: 'Your listing has been successfully posted.',
-      });
-      router.push('/listings/my');
-    } catch (error) {
-      console.error('Error creating listing:', error);
-      toast({
-        title: 'Error Creating Listing',
-        description: error instanceof Error ? error.message : 'An unknown error occurred.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    console.log('Creating record with data:', JSON.stringify(finalRecord, null, 2));
+    
+    // Add timeout for record creation
+    const createRecordPromise = agent.com.atproto.repo.createRecord({
+      repo: agent.session.did,
+      collection: 'app.bsky.feed.post', 
+      record: finalRecord,
+    });
+    
+    const result = await Promise.race([
+      createRecordPromise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Record creation timeout after 30 seconds')), 30000)
+      )
+    ]);
+    
+    console.log('Record created successfully:', result);
   };
 
   return (

@@ -35,7 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.success && result.data) {
       const currentSession = await apiGetCurrentSession();
       setSession(currentSession as UserSession);
-      // TODO: Store session securely (e.g., in an HttpOnly cookie via an API route)
+      // Store session in localStorage for persistence
+      if (currentSession && typeof window !== 'undefined') {
+        localStorage.setItem('bsky_session', JSON.stringify(currentSession));
+      }
       setIsLoading(false);
       return { success: true };
     } else {
@@ -48,25 +51,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     await apiLogout();
     setSession(null);
-    // TODO: Clear session from secure storage (e.g., cookie via an API route)
+    // Clear session from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bsky_session');
+    }
     setIsLoading(false);
   };
 
   const resumeSession = async (): Promise<UserSession | null> => {
     setIsLoading(true);
     try {
+      // First try to get session from localStorage
+      if (typeof window !== 'undefined') {
+        const storedSession = localStorage.getItem('bsky_session');
+        if (storedSession) {
+          try {
+            const parsedSession = JSON.parse(storedSession);
+            // Try to resume the stored session with the agent
+            const agent = getAgent();
+            const resumeResult = await agent.resumeSession(parsedSession);
+            if (resumeResult.success && agent.session) {
+              setSession(agent.session as UserSession);
+              // Update localStorage with fresh session data
+              localStorage.setItem('bsky_session', JSON.stringify(agent.session));
+              setIsLoading(false);
+              return agent.session as UserSession;
+            } else {
+              // Session is invalid, remove from storage
+              localStorage.removeItem('bsky_session');
+            }
+          } catch (parseError) {
+            console.error('Failed to parse stored session:', parseError);
+            localStorage.removeItem('bsky_session');
+          }
+        }
+      }
+      
+      // Fallback to checking current session
       const activeSession = await apiGetCurrentSession();
       if (activeSession) {
         setSession(activeSession as UserSession);
+        // Store the session for future use
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bsky_session', JSON.stringify(activeSession));
+        }
         setIsLoading(false);
         return activeSession as UserSession;
       }
+      
       setSession(null);
       setIsLoading(false);
       return null;
     } catch (error) {
       console.error('Failed to resume session:', error);
       setSession(null);
+      // Clear potentially corrupted session data
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('bsky_session');
+      }
       setIsLoading(false);
       return null;
     }
