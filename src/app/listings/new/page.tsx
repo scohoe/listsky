@@ -43,6 +43,42 @@ const NewListingPage = () => {
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]); 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+
+  const testConnection = async () => {
+    try {
+      console.log('=== TESTING CONNECTION ===');
+      const agent = getAgent();
+      console.log('Agent:', !!agent);
+      console.log('Agent session:', !!agent.session);
+      console.log('Session DID:', agent.session?.did);
+      console.log('Session handle:', agent.session?.handle);
+      
+      if (!agent.session) {
+        setDebugInfo('❌ No agent session found');
+        return;
+      }
+      
+      // Test a simple API call
+      const profile = await agent.getProfile({ actor: agent.session.did });
+      console.log('Profile test result:', profile);
+      
+      setDebugInfo(`✅ Connection OK - DID: ${agent.session.did}, Handle: ${agent.session.handle}`);
+      
+      toast({
+        title: 'Connection Test',
+        description: 'Agent session is working correctly!',
+      });
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      setDebugInfo(`❌ Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast({
+        title: 'Connection Test Failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -74,14 +110,47 @@ const NewListingPage = () => {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    console.log('=== FORM SUBMISSION STARTED ===');
+    console.log('Form data:', formData);
+    console.log('Selected files:', selectedFiles?.length || 0);
+    console.log('Session:', session);
+    
+    // Basic form validation
+    if (!formData.title.trim()) {
+      toast({ title: 'Error', description: 'Please enter a title for your listing.', variant: 'destructive' });
+      return;
+    }
+    
+    if (!formData.description.trim()) {
+      toast({ title: 'Error', description: 'Please enter a description for your listing.', variant: 'destructive' });
+      return;
+    }
+    
+    if (!formData.zipCode.trim()) {
+      toast({ title: 'Error', description: 'Please enter a ZIP code.', variant: 'destructive' });
+      return;
+    }
+    
     if (!session) {
+      console.error('No session found');
       toast({ title: 'Error', description: 'You must be logged in to create a listing.', variant: 'destructive' });
       return;
     }
+    
     setIsSubmitting(true);
+    console.log('Setting isSubmitting to true');
+    
+    // Show immediate feedback to user
+    toast({
+      title: 'Creating Listing...',
+      description: 'Please wait while we process your listing.',
+    });
 
     try {
       const agent = getAgent();
+      console.log('Agent obtained:', !!agent);
+      console.log('Agent session:', !!agent.session);
+      
       if (!agent.session) {
         throw new Error('Agent session not found. Please try logging in again.');
       }
@@ -98,31 +167,53 @@ const NewListingPage = () => {
         ]);
       };
 
-      await createListingWithTimeout();
+      const result = await createListingWithTimeout();
+      console.log('Listing creation completed successfully:', result);
 
       toast({
         title: 'Listing Created!',
         description: 'Your listing has been successfully posted.',
       });
+      console.log('Navigating to /listings/my');
       router.push('/listings/my');
     } catch (error) {
-      console.error('Error creating listing:', error);
+      console.error('=== ERROR CREATING LISTING ===');
+      console.error('Error details:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      
+      let errorMessage = 'An unknown error occurred.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // Add more specific error handling
+        if (error.message.includes('timeout')) {
+          errorMessage = 'The request timed out. Please check your internet connection and try again.';
+        } else if (error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message.includes('session')) {
+          errorMessage = 'Session expired. Please log in again.';
+        }
+      }
+      
       toast({
         title: 'Error Creating Listing',
-        description: error instanceof Error ? error.message : 'An unknown error occurred.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
+      console.log('Setting isSubmitting to false');
       setIsSubmitting(false);
     }
   };
 
   const createListingProcess = async (agent: any) => {
+    console.log('=== STARTING LISTING CREATION PROCESS ===');
+    console.log('Agent DID:', agent.session?.did);
+    console.log('Agent handle:', agent.session?.handle);
 
     // Get coordinates for the ZIP code
     let coordinates = null;
     try {
-      console.log('Getting coordinates for ZIP code:', formData.zipCode);
+      console.log('Step 1: Getting coordinates for ZIP code:', formData.zipCode);
       // Import the getZipCodeCoordinates function
       const { getZipCodeCoordinates } = await import('@/lib/geo-utils');
       coordinates = await Promise.race([
@@ -131,23 +222,29 @@ const NewListingPage = () => {
           setTimeout(() => reject(new Error('Geocoding timeout')), 10000)
         )
       ]);
-      console.log('Coordinates obtained:', coordinates);
+      console.log('Step 1 completed - Coordinates obtained:', coordinates);
     } catch (error) {
-      console.error('Error getting coordinates for ZIP code:', error);
+      console.error('Step 1 failed - Error getting coordinates for ZIP code:', error);
       // Continue without coordinates - they're optional
     }
 
+    console.log('Step 2: Starting image upload process');
     const uploadedImageBlobs: { alt: string; image: { $type: string; ref: { $link: string }; mimeType: string; size: number } }[] = [];
     if (selectedFiles) {
-      console.log('Uploading', selectedFiles.length, 'images...');
+      console.log('Step 2: Uploading', selectedFiles.length, 'images...');
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
-        console.log(`Uploading image ${i + 1}/${selectedFiles.length}:`, file.name, file.size, 'bytes');
+        console.log(`Step 2.${i + 1}: Uploading image ${i + 1}/${selectedFiles.length}:`, file.name, file.size, 'bytes');
         
         try {
+          console.log(`Step 2.${i + 1}: Converting file to array buffer...`);
+          const arrayBuffer = await file.arrayBuffer();
+          console.log(`Step 2.${i + 1}: Array buffer created, size:`, arrayBuffer.byteLength);
+          
+          console.log(`Step 2.${i + 1}: Starting blob upload to AT Protocol...`);
           // Add timeout for individual image uploads
           const uploadPromise = agent.com.atproto.repo.uploadBlob(
-            new Uint8Array(await file.arrayBuffer()), 
+            new Uint8Array(arrayBuffer), 
             { encoding: file.type }
           );
           
@@ -158,8 +255,10 @@ const NewListingPage = () => {
             )
           ]);
           
+          console.log(`Step 2.${i + 1}: Upload response received:`, response);
+          
           if (response.success) {
-            console.log(`Image ${i + 1} uploaded successfully:`, response.data.blob.ref);
+            console.log(`Step 2.${i + 1}: Image uploaded successfully:`, response.data.blob.ref);
             uploadedImageBlobs.push({ 
               alt: formData.title || 'Listing image', 
               image: { 
@@ -173,11 +272,13 @@ const NewListingPage = () => {
             throw new Error(`Image upload failed for ${file.name}: ${JSON.stringify(response)}`);
           }
         } catch (uploadError) {
-          console.error(`Failed to upload image ${file.name}:`, uploadError);
+          console.error(`Step 2.${i + 1}: Failed to upload image ${file.name}:`, uploadError);
           throw new Error(`Failed to upload image ${file.name}: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
         }
       }
-      console.log('All images uploaded successfully');
+      console.log('Step 2 completed: All images uploaded successfully');
+    } else {
+      console.log('Step 2: No images to upload');
     }
 
       const recordToCreate = {
@@ -269,23 +370,35 @@ const NewListingPage = () => {
         langs: ['en'],
       };
 
-    console.log('Creating record with data:', JSON.stringify(finalRecord, null, 2));
+    console.log('Step 3: Creating record with data:', JSON.stringify(finalRecord, null, 2));
     
-    // Add timeout for record creation
-    const createRecordPromise = agent.com.atproto.repo.createRecord({
-      repo: agent.session.did,
-      collection: 'app.bsky.feed.post', 
-      record: finalRecord,
-    });
-    
-    const result = await Promise.race([
-      createRecordPromise,
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Record creation timeout after 30 seconds')), 30000)
-      )
-    ]);
-    
-    console.log('Record created successfully:', result);
+    try {
+      console.log('Step 3: Preparing createRecord call...');
+      console.log('Step 3: Repository DID:', agent.session.did);
+      console.log('Step 3: Collection:', 'app.bsky.feed.post');
+      
+      // Add timeout for record creation
+      const createRecordPromise = agent.com.atproto.repo.createRecord({
+        repo: agent.session.did,
+        collection: 'app.bsky.feed.post', 
+        record: finalRecord,
+      });
+      
+      console.log('Step 3: createRecord promise created, waiting for response...');
+      
+      const result = await Promise.race([
+        createRecordPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Record creation timeout after 30 seconds')), 30000)
+        )
+      ]);
+      
+      console.log('Step 3 completed: Record created successfully:', result);
+      return result;
+    } catch (recordError) {
+      console.error('Step 3 failed: Error creating record:', recordError);
+      throw recordError;
+    }
   };
 
   return (
@@ -303,6 +416,22 @@ const NewListingPage = () => {
               <CardDescription className="text-lg text-gray-600 mt-2">
                 Share your item or service with the Bluesky community
               </CardDescription>
+              {debugInfo && (
+                <div className="mt-4 p-3 bg-gray-100 rounded-lg text-sm font-mono">
+                  {debugInfo}
+                </div>
+              )}
+              <div className="mt-4">
+                <Button 
+                  type="button" 
+                  onClick={testConnection}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                >
+                  🔧 Test Connection
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="px-8">
             <form onSubmit={handleSubmit} className="space-y-8">
