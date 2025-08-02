@@ -445,6 +445,5 @@ export default function ListingsPage() {
         )}
       </div>
     </div>
-    </div>
   );
 }
