@@ -11,7 +11,12 @@ const nextConfig = {
   },
   // Ensure compatibility with Netlify
   trailingSlash: false,
-  output: 'standalone',
+  // Remove standalone output for Netlify compatibility
+  // Let Netlify handle the deployment configuration
+  experimental: {
+    // Enable modern bundling for better performance
+    esmExternals: true,
+  },
 };
 
 module.exports = nextConfig;
