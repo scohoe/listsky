@@ -224,7 +224,7 @@ const ListingsPage = () => {
 
         <div className="mb-8">
           <ListingFilters 
-            onFilterChange={handleFilterChange} 
+            onFilterChange={handleFilterChange}
             filters={activeFilters}
             isLoading={isLoading && listings.length === 0} 
           />

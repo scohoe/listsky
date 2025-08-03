@@ -1,4 +1,4 @@
-import { BskyAgent } from '@atproto/api';
+import { BskyAgent, BlobRef } from '@atproto/api';
 import { getAgent } from './atproto';
 
 // Types for marketplace operations
@@ -16,14 +16,15 @@ export interface MarketplaceListing {
     latitude?: number;
     longitude?: number;
   };
-  images?: Blob[];
+  images?: File[];
   tags?: string[];
   status?: 'active' | 'sold' | 'expired' | 'draft';
   allowMessages?: boolean;
   expiresAt?: string;
 }
 
-export interface ListingRecord extends MarketplaceListing {
+export interface ListingRecord extends Omit<MarketplaceListing, 'images'> {
+  images?: BlobRef[];
   createdAt: string;
   updatedAt?: string;
   viewCount?: number;
@@ -75,7 +76,7 @@ interface MarketplaceConfig {
 const config: MarketplaceConfig = {
   useCustomRecords: process.env.NEXT_PUBLIC_USE_CUSTOM_RECORDS === 'true',
   enableCrossPosting: process.env.NEXT_PUBLIC_ENABLE_CROSS_POSTING !== 'false',
-  appViewEndpoint: process.env.NEXT_PUBLIC_MARKETPLACE_APPVIEW_URL,
+  appViewEndpoint: process.env.NEXT_PUBLIC_MARKETPLACE_APPVIEW_URL || '/.netlify/functions',
 };
 
 /**
@@ -91,9 +92,32 @@ export async function createMarketplaceListing(
     throw new Error('No authenticated agent available');
   }
 
+  // Upload images to AT Protocol if provided
+  let processedImages: BlobRef[] = [];
+  if (listing.images && listing.images.length > 0) {
+    try {
+      processedImages = await Promise.all(
+        listing.images.map(async (image) => {
+          // Convert File to Uint8Array
+          const arrayBuffer = await image.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          const response = await agent.uploadBlob(uint8Array, {
+            encoding: image.type || 'image/jpeg',
+          });
+          return response.data.blob;
+        })
+      );
+    } catch (error) {
+      console.warn('Failed to upload images:', error);
+      // Continue without images if upload fails
+    }
+  }
+
   // Prepare the listing record
   const record: ListingRecord = {
     ...listing,
+    images: processedImages,
     createdAt: new Date().toISOString(),
     status: listing.status || 'active',
     allowMessages: listing.allowMessages !== false,
@@ -118,9 +142,25 @@ export async function createMarketplaceListing(
     // Notify AppView for indexing (if configured)
     if (config.appViewEndpoint) {
       try {
-        await notifyAppViewOfNewListing(listingUri, {
-          crossPost: options.crossPost,
-          crossPostText: options.crossPostText,
+        const profile = await agent.getProfile({ actor: agent.session?.did || '' });
+        
+        await fetch(`${config.appViewEndpoint}/com-marketplace-notifyNewListing`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            uri: listingUri,
+            listing: record,
+            author: {
+              did: agent.session?.did,
+              handle: profile.data.handle,
+              displayName: profile.data.displayName,
+              avatar: profile.data.avatar,
+            },
+            crossPost: options.crossPost,
+            crossPostText: options.crossPostText,
+          }),
         });
       } catch (error) {
         console.warn('Failed to notify AppView:', error);
@@ -185,12 +225,40 @@ export async function updateMarketplaceListing(
       rkey,
     });
 
+    // Process images if provided in updates
+    let processedImages: BlobRef[] | undefined;
+    if (updates.images && updates.images.length > 0) {
+      try {
+        processedImages = await Promise.all(
+          updates.images.map(async (image) => {
+            // Convert File to Uint8Array
+            const arrayBuffer = await image.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            const response = await agent.uploadBlob(uint8Array, {
+              encoding: image.type || 'image/jpeg',
+            });
+            return response.data.blob;
+          })
+        );
+      } catch (error) {
+        console.warn('Failed to upload images:', error);
+        // Keep existing images if upload fails
+        processedImages = (currentRecord.data.value as ListingRecord).images;
+      }
+    }
+
     // Merge updates with current record
     const updatedRecord: ListingRecord = {
       ...currentRecord.data.value as ListingRecord,
       ...updates,
+      images: processedImages || (currentRecord.data.value as ListingRecord).images,
       updatedAt: new Date().toISOString(),
     };
+    
+    // Remove the images from updates to avoid type conflicts
+    const { images: _, ...updatesWithoutImages } = updates;
+    Object.assign(updatedRecord, updatesWithoutImages);
 
     // Update the record
     const response = await agent.com.atproto.repo.putRecord({
@@ -292,6 +360,66 @@ export async function getUserListings(
 }
 
 /**
+ * Get all listings for browsing
+ */
+export async function getAllListings(
+  filters: SearchFilters = {},
+  options: SearchOptions = {}
+): Promise<{ listings: ListingView[]; total: number; cursor?: string }> {
+  // If AppView is available, use it
+  if (config.appViewEndpoint) {
+    try {
+      const searchParams = new URLSearchParams();
+      
+      // Add filters
+      if (filters.category) searchParams.set('category', filters.category);
+      if (filters.location) searchParams.set('location', filters.location);
+      if (filters.radius) searchParams.set('radius', filters.radius.toString());
+      if (filters.minPrice) searchParams.set('minPrice', filters.minPrice.toString());
+      if (filters.maxPrice) searchParams.set('maxPrice', filters.maxPrice.toString());
+      if (filters.condition) {
+        filters.condition.forEach(c => searchParams.append('condition', c));
+      }
+      if (filters.tags) {
+        filters.tags.forEach(t => searchParams.append('tags', t));
+      }
+      if (filters.hasImages !== undefined) {
+        searchParams.set('hasImages', filters.hasImages.toString());
+      }
+      if (filters.postedSince) searchParams.set('postedSince', filters.postedSince);
+      
+      // Add options
+      if (options.limit) searchParams.set('limit', options.limit.toString());
+      if (options.cursor) searchParams.set('cursor', options.cursor);
+      if (options.sortBy) searchParams.set('sortBy', options.sortBy);
+      if (options.sortOrder) searchParams.set('sortOrder', options.sortOrder);
+
+      const response = await fetch(
+        `${config.appViewEndpoint}/com-marketplace-getAllListings?${searchParams}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          listings: data.listings || [],
+          total: data.total || 0,
+          cursor: data.cursor,
+        };
+      }
+    } catch (error) {
+      console.warn('AppView failed, falling back to empty results:', error);
+    }
+  }
+  
+  // Fallback to empty results if no AppView
+  console.warn('AppView not configured, cannot browse all listings');
+  return {
+    listings: [],
+    total: 0,
+  };
+}
+
+/**
  * Search marketplace listings
  */
 export async function searchListings(
@@ -301,7 +429,48 @@ export async function searchListings(
 ): Promise<{ listings: ListingView[]; total: number; cursor?: string }> {
   // If AppView is available, use it for search
   if (config.appViewEndpoint) {
-    return await searchListingsFromAppView(query, filters, options);
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set('q', query);
+      
+      // Add filters
+      if (filters.category) searchParams.set('category', filters.category);
+      if (filters.location) searchParams.set('location', filters.location);
+      if (filters.radius) searchParams.set('radius', filters.radius.toString());
+      if (filters.minPrice) searchParams.set('minPrice', filters.minPrice.toString());
+      if (filters.maxPrice) searchParams.set('maxPrice', filters.maxPrice.toString());
+      if (filters.condition) {
+        filters.condition.forEach(c => searchParams.append('condition', c));
+      }
+      if (filters.tags) {
+        filters.tags.forEach(t => searchParams.append('tags', t));
+      }
+      if (filters.hasImages !== undefined) {
+        searchParams.set('hasImages', filters.hasImages.toString());
+      }
+      if (filters.postedSince) searchParams.set('postedSince', filters.postedSince);
+      
+      // Add options
+      if (options.limit) searchParams.set('limit', options.limit.toString());
+      if (options.cursor) searchParams.set('cursor', options.cursor);
+      if (options.sortBy) searchParams.set('sortBy', options.sortBy);
+      if (options.sortOrder) searchParams.set('sortOrder', options.sortOrder);
+
+      const response = await fetch(
+        `${config.appViewEndpoint}/com-marketplace-searchListings?${searchParams}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          listings: data.listings || [],
+          total: data.total || 0,
+          cursor: data.cursor,
+        };
+      }
+    } catch (error) {
+      console.warn('AppView search failed, falling back to direct PDS query:', error);
+    }
   }
 
   // Fallback: Basic search using direct PDS queries

@@ -1,42 +1,25 @@
 [build]
   command = "npm run build"
-  publish = ".next"
+  publish = "out"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [build.environment]
   NODE_VERSION = "18"
 
-# Next.js specific configuration
-[functions]
-  directory = ".netlify/functions"
+# Enable Netlify Blobs
+[context.production.environment]
+  NETLIFY_BLOBS_CONTEXT = "production"
 
-# Security headers for localStorage and session persistence
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    # Allow localStorage and sessionStorage
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://bsky.social https://*.bsky.social https://api.bsky.app https://*.api.bsky.app; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';"
+[context.deploy-preview.environment]
+  NETLIFY_BLOBS_CONTEXT = "deploy-preview"
 
-# Handle Next.js routing - only redirect 404s to Next.js, not all routes
-[[redirects]]
-  from = "/_next/*"
-  to = "/_next/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/api/*"
-  to = "/api/:splat"
-  status = 200
-
-# Fallback for client-side routing (only for actual 404s)
-[[redirects]]
-  from = "/*"
-  to = "/404.html"
-  status = 404
-
-# Environment variables that should be set in Netlify dashboard:
-# AT_PROTOCOL_SERVICE_URL - The AT Protocol service URL (default: https://bsky.social)
-# NEXT_PUBLIC_APP_URL - Your Netlify site URL (e.g., https://blistsky.netlify.app)
+[context.branch-deploy.environment]
+  NETLIFY_BLOBS_CONTEXT = "branch-deploy"

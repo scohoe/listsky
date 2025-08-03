@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 
 interface Author {
   did: string;
-  handle: string;
+  handle?: string;
   displayName?: string;
   avatar?: string;
 }
@@ -71,12 +71,12 @@ export default function Card({
       <CardFooter className="flex justify-between items-center text-sm text-gray-500 pt-4 border-t border-gray-100">
         <div className="flex items-center space-x-2">
           <div className="w-6 h-6 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-white text-xs font-bold">
-            {(author.displayName || author.handle).charAt(0).toUpperCase()}
+            {(author.displayName || author.handle || author.did).charAt(0).toUpperCase()}
           </div>
           <div className="flex flex-col">
             <span className="text-xs text-gray-400">by</span>
             <span className="font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200">
-              {author.displayName || author.handle}
+              {author.displayName || author.handle || author.did.split(':').pop()}
             </span>
           </div>
         </div>

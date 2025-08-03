@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAgent } from '@/lib/agent';
-import { AppBskyFeedDefs } from '@atproto/api';
+import { getAllListings, ListingView } from '@/lib/marketplace-api';
 import Card from '@/components/card';
 import ListingFilters from '@/components/listing-filters';
 import { Button } from '@/components/ui/button';
@@ -22,33 +22,14 @@ const MapView = dynamic(() => import('@/components/map-view'), {
   ),
 });
 
-// Define the interface for a listing post
-interface ListingPost extends AppBskyFeedDefs.FeedViewPost {
-  record: {
-    text: string;
-    $type: string;
-    langs?: string[];
-    createdAt: string;
-    listing?: {
-      title: string;
-      description: string;
-      price: number;
-      category?: string;
-      location?: {
-        zipCode: string;
-        address?: string;
-      };
-      tags?: string[];
-      images?: string[];
-    };
-  };
-}
+// Use the ListingView interface from marketplace-api
 
 export default function ListingsPage() {
   const agent = useAgent();
   const { toast } = useToast();
-  const [listings, setListings] = useState<ListingPost[]>([]);
-  const [filteredListings, setFilteredListings] = useState<ListingPost[]>([]);
+  const [listings, setListings] = useState<ListingView[]>([]);
+  const [filteredListings, setFilteredListings] = useState<ListingView[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<GeoError | null>(null);
@@ -79,7 +60,7 @@ export default function ListingsPage() {
         // Filter by category
         if (filters.category) {
           filtered = filtered.filter(
-            (post) => post.record.listing?.category === filters.category
+            (listing) => listing.record.category === filters.category
           );
         }
 
@@ -87,14 +68,14 @@ export default function ListingsPage() {
         if (filters.minPrice) {
           const minPrice = parseFloat(filters.minPrice);
           filtered = filtered.filter(
-            (post) => (post.record.listing?.price || 0) >= minPrice
+            (listing) => parseFloat(listing.record.price || '0') >= minPrice
           );
         }
 
         if (filters.maxPrice) {
           const maxPrice = parseFloat(filters.maxPrice);
           filtered = filtered.filter(
-            (post) => (post.record.listing?.price || 0) <= maxPrice
+            (listing) => parseFloat(listing.record.price || '0') <= maxPrice
           );
         }
 
@@ -113,8 +94,8 @@ export default function ListingsPage() {
             if (centerCoords) {
               // Filter listings by distance
               const filteredByDistance = [];
-              for (const post of filtered) {
-                const listingZipCode = post.record.listing?.location?.zipCode;
+              for (const listing of filtered) {
+                const listingZipCode = listing.record.location?.zipCode;
                 if (!listingZipCode) continue;
 
                 // Try to get coordinates for this listing
@@ -122,7 +103,7 @@ export default function ListingsPage() {
                   // For performance, we'll use a simple string comparison first
                   // If the ZIP codes match exactly, it's definitely within the radius
                   if (listingZipCode === centerZipCode) {
-                    filteredByDistance.push(post);
+                    filteredByDistance.push(listing);
                     continue;
                   }
 
@@ -140,13 +121,13 @@ export default function ListingsPage() {
                   );
 
                   if (distance <= radiusMiles) {
-                    filteredByDistance.push(post);
+                    filteredByDistance.push(listing);
                   }
                 } catch (error) {
                   console.error('Error calculating distance for listing:', error);
                   // Fall back to simple string matching if we can't calculate distance
                   if (listingZipCode.startsWith(centerZipCode.substring(0, 3))) {
-                    filteredByDistance.push(post);
+                    filteredByDistance.push(listing);
                   }
                 }
               }
@@ -190,8 +171,8 @@ export default function ListingsPage() {
               }
               
               // Fall back to simple string matching
-              filtered = filtered.filter((post) => {
-                const listingZipCode = post.record.listing?.location?.zipCode;
+              filtered = filtered.filter((listing) => {
+                const listingZipCode = listing.record.location?.zipCode;
                 return listingZipCode && listingZipCode.startsWith(filters.location.substring(0, 3));
               });
             }
@@ -230,7 +211,7 @@ export default function ListingsPage() {
     }
   };
 
-  // Fetch listings from the Bluesky API
+  // Fetch listings from the marketplace API
   const fetchListings = async () => {
     setLoading(true);
     setError(null);
@@ -242,19 +223,12 @@ export default function ListingsPage() {
         return;
       }
 
-      // Get the timeline
-      const response = await agent.getTimeline({ limit: 100 });
+      // Get listings from the marketplace AppView
+      const response = await getAllListings({}, { limit: 100 });
 
-      // Filter posts that have the listing schema
-      const listingPosts = response.data.feed.filter(
-        (post) =>
-          post.reason?.$type !== 'app.bsky.feed.defs#reasonRepost' &&
-          (post.post.record as any).$type === 'app.bsky.feed.post' &&
-          (post.post.record as any).listing
-      ) as ListingPost[];
-
-      setListings(listingPosts);
-      setFilteredListings(listingPosts);
+      setListings(response.listings);
+      setFilteredListings(response.listings);
+      setTotal(response.total);
     } catch (err) {
       console.error('Error fetching listings:', err);
       setError('Failed to load listings. Please try again later.');
@@ -264,16 +238,15 @@ export default function ListingsPage() {
   };
 
   // Map listings to the format expected by MapView
-  const mapListings = filteredListings.map((post) => {
-    const listing = post.record.listing;
-    if (!listing) return null;
+  const mapListings = filteredListings.map((listing) => {
+    if (!listing.record) return null;
 
     // Extract coordinates if available (will be added by the geolocation service)
     let coordinates;
     try {
       // In a real app, you would store coordinates with the listing
       // For this demo, we'll use a placeholder
-      if (listing.location?.zipCode) {
+      if (listing.record.location?.zipCode) {
         // This would normally come from your database or API
         // Here we're just creating a placeholder
         coordinates = { lat: 0, lng: 0 }; // Will be populated by MapView component
@@ -283,15 +256,15 @@ export default function ListingsPage() {
     }
 
     return {
-      id: post.post.uri,
-      uri: post.post.uri,
-      title: listing.title,
-      description: listing.description,
-      price: listing.price,
-      category: listing.category || 'Uncategorized',
+      id: listing.uri,
+      uri: listing.uri,
+      title: listing.record.title,
+      description: listing.record.description,
+      price: parseFloat(listing.record.price || '0'),
+      category: listing.record.category || 'Uncategorized',
       location: {
-        zipCode: listing.location?.zipCode || '',
-        address: listing.location?.address,
+        zipCode: listing.record.location?.zipCode || '',
+        address: listing.record.location?.address,
         coordinates
       }
     };
@@ -422,21 +395,16 @@ export default function ListingsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {filteredListings.map((post) => (
+                {filteredListings.map((listing) => (
                   <Card
-                    key={post.post.uri}
-                    uri={post.post.uri}
-                    title={post.record.listing?.title || 'Untitled Listing'}
-                    price={post.record.listing?.price}
-                    description={post.record.listing?.description || ''}
-                    category={post.record.listing?.category}
-                    author={{
-                      did: post.post.author.did,
-                      handle: post.post.author.handle,
-                      displayName: post.post.author.displayName,
-                      avatar: post.post.author.avatar,
-                    }}
-                    createdAt={post.post.indexedAt}
+                    key={listing.uri}
+                    uri={listing.uri}
+                    title={listing.record.title || 'Untitled Listing'}
+                    price={parseFloat(listing.record.price || '0')}
+                    description={listing.record.description || ''}
+                    category={listing.record.category}
+                    author={listing.author}
+                    createdAt={listing.record.createdAt}
                   />
                 ))}
               </div>

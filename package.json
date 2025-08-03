@@ -13,6 +13,7 @@
     "@atproto/api": "^0.6.23",
     "@atproto/lexicon": "^0.3.0",
     "@atproto/uri": "^0.0.2",
+    "@netlify/blobs": "^10.0.8",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
