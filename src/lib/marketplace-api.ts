@@ -139,6 +139,11 @@ export async function createMarketplaceListing(
 
     console.log('Created marketplace listing:', { uri: listingUri, cid: listingCid });
 
+    // Add user to known marketplace users cache (WhiteWind-style)
+    if (agent.session?.did) {
+      addKnownMarketplaceUser(agent.session.did);
+    }
+
     // Notify AppView for indexing (if configured)
     if (config.appViewEndpoint) {
       try {
@@ -306,8 +311,183 @@ export async function deleteMarketplaceListing(uri: string): Promise<void> {
   }
 }
 
+// Known marketplace users caching (WhiteWind-style)
+const KNOWN_MARKETPLACE_USERS_KEY = 'marketplace_known_users';
+
 /**
- * Get user's marketplace listings
+ * Add a user to the known marketplace users cache
+ */
+export function addKnownMarketplaceUser(did: string): void {
+  const known = getKnownMarketplaceUsers();
+  if (!known.includes(did)) {
+    known.push(did);
+    try {
+      localStorage.setItem(KNOWN_MARKETPLACE_USERS_KEY, JSON.stringify(known));
+    } catch (error) {
+      console.warn('Failed to update known users cache:', error);
+    }
+  }
+}
+
+/**
+ * Get the list of known marketplace users
+ */
+export function getKnownMarketplaceUsers(): string[] {
+  try {
+    const stored = localStorage.getItem(KNOWN_MARKETPLACE_USERS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.warn('Failed to load known users cache:', error);
+    return [];
+  }
+}
+
+/**
+ * Get listings from multiple known users (WhiteWind-style aggregation)
+ */
+export async function getAllListingsFromKnownUsers(userDids: string[]): Promise<ListingView[]> {
+  const allListings: ListingView[] = [];
+  
+  // Always include current user if authenticated
+  const agent = await getAgent();
+  if (agent?.session?.did && !userDids.includes(agent.session.did)) {
+    userDids = [agent.session.did, ...userDids];
+  }
+  
+  // If no known users, return empty array
+  if (userDids.length === 0) {
+    console.log('No known marketplace users found');
+    return [];
+  }
+  
+  console.log(`Fetching listings from ${userDids.length} known users`);
+  
+  for (const did of userDids) {
+    try {
+      const userListings = await getUserListings(did);
+      allListings.push(...userListings.listings);
+      console.log(`Fetched ${userListings.listings.length} listings from ${did}`);
+    } catch (error) {
+      console.warn(`Failed to fetch listings for ${did}:`, error);
+      // Continue with other users even if one fails
+    }
+  }
+  
+  // Sort by creation date (newest first)
+  return allListings.sort((a, b) => 
+    new Date(b.record.createdAt).getTime() - new Date(a.record.createdAt).getTime()
+  );
+}
+
+/**
+ * Apply client-side filters to listings
+ */
+function applyClientSideFilters(listings: ListingView[], filters: SearchFilters): ListingView[] {
+  return listings.filter((listing) => {
+    const record = listing.record;
+    
+    // Category filter
+    if (filters.category && record.category !== filters.category) {
+      return false;
+    }
+    
+    // Condition filter
+    if (filters.condition && filters.condition.length > 0) {
+      if (!record.condition || !filters.condition.includes(record.condition)) {
+        return false;
+      }
+    }
+    
+    // Price filters
+    if (filters.minPrice !== undefined) {
+      const price = parseFloat(record.price.replace(/[^\d.]/g, ''));
+      if (isNaN(price) || price < filters.minPrice) {
+        return false;
+      }
+    }
+    
+    if (filters.maxPrice !== undefined) {
+      const price = parseFloat(record.price.replace(/[^\d.]/g, ''));
+      if (isNaN(price) || price > filters.maxPrice) {
+        return false;
+      }
+    }
+    
+    // Tags filter
+    if (filters.tags && filters.tags.length > 0) {
+      const recordTags = record.tags || [];
+      const hasMatchingTag = filters.tags.some(tag => 
+        recordTags.some(recordTag => 
+          recordTag.toLowerCase().includes(tag.toLowerCase())
+        )
+      );
+      if (!hasMatchingTag) {
+        return false;
+      }
+    }
+    
+    // Images filter
+    if (filters.hasImages !== undefined) {
+      const hasImages = record.images && record.images.length > 0;
+      if (filters.hasImages !== hasImages) {
+        return false;
+      }
+    }
+    
+    // Posted since filter
+    if (filters.postedSince) {
+      const postedDate = new Date(record.createdAt);
+      const sinceDate = new Date(filters.postedSince);
+      if (postedDate < sinceDate) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+}
+
+/**
+ * Apply sorting to listings
+ */
+function applySorting(
+  listings: ListingView[], 
+  sortBy: 'relevance' | 'createdAt' | 'price' | 'distance', 
+  sortOrder: 'asc' | 'desc'
+): ListingView[] {
+  return [...listings].sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'createdAt':
+        comparison = new Date(a.record.createdAt).getTime() - new Date(b.record.createdAt).getTime();
+        break;
+      case 'price':
+        const priceA = parseFloat(a.record.price.replace(/[^\d.]/g, '')) || 0;
+        const priceB = parseFloat(b.record.price.replace(/[^\d.]/g, '')) || 0;
+        comparison = priceA - priceB;
+        break;
+      case 'distance':
+        // Use distance if available, otherwise sort by creation date
+        if (a.distance !== undefined && b.distance !== undefined) {
+          comparison = a.distance - b.distance;
+        } else {
+          comparison = new Date(b.record.createdAt).getTime() - new Date(a.record.createdAt).getTime();
+        }
+        break;
+      case 'relevance':
+      default:
+        // For relevance, sort by creation date as fallback
+        comparison = new Date(b.record.createdAt).getTime() - new Date(a.record.createdAt).getTime();
+        break;
+    }
+    
+    return sortOrder === 'desc' ? -comparison : comparison;
+  });
+}
+
+/**
+ * Get user's marketplace listings (Enhanced WhiteWind-style)
  */
 export async function getUserListings(
   did?: string,
@@ -325,37 +505,79 @@ export async function getUserListings(
   }
 
   try {
-    // If AppView is available, use it for better performance
-    if (config.appViewEndpoint) {
-      return await getListingsFromAppView({ author: targetDid, ...options });
-    }
-
-    // Fallback: Get records directly from PDS
+    // Always query PDS directly (WhiteWind-style approach)
+    console.log(`Fetching listings directly from PDS for user: ${targetDid}`);
+    
     const response = await agent.com.atproto.repo.listRecords({
       repo: targetDid,
       collection: 'com.marketplace.listing',
-      limit: options.limit || 25,
+      limit: options.limit || 100, // Reasonable limit like WhiteWind
       cursor: options.cursor,
     });
 
-    const listings: ListingView[] = response.data.records.map((record) => ({
-      uri: record.uri,
-      cid: record.cid,
-      author: {
-        did: targetDid,
-        // TODO: Fetch profile information
-      },
-      record: record.value as ListingRecord,
-      indexedAt: new Date().toISOString(),
-    }));
+    // Fetch user profile for better display
+    let userProfile;
+    try {
+      userProfile = await agent.getProfile({ actor: targetDid });
+    } catch (profileError) {
+      console.warn(`Failed to fetch profile for ${targetDid}:`, profileError);
+    }
+
+    const listings: ListingView[] = response.data.records
+      .filter((record) => {
+        // Filter out invalid or expired listings
+        const listingRecord = record.value as ListingRecord;
+        if (listingRecord.status === 'expired' || listingRecord.status === 'draft') {
+          return false;
+        }
+        
+        // Check if listing has expired
+        if (listingRecord.expiresAt) {
+          const expiryDate = new Date(listingRecord.expiresAt);
+          if (expiryDate < new Date()) {
+            return false;
+          }
+        }
+        
+        return true;
+      })
+      .map((record) => ({
+        uri: record.uri,
+        cid: record.cid,
+        author: {
+          did: targetDid,
+          handle: userProfile?.data.handle,
+          displayName: userProfile?.data.displayName,
+          avatar: userProfile?.data.avatar,
+        },
+        record: record.value as ListingRecord,
+        indexedAt: (record.value as ListingRecord).createdAt || new Date().toISOString(),
+      }));
+
+    // Add this user to known marketplace users if they have listings
+    if (listings.length > 0) {
+      addKnownMarketplaceUser(targetDid);
+    }
+
+    console.log(`Found ${listings.length} active listings for user ${targetDid}`);
 
     return {
       listings,
       cursor: response.data.cursor,
     };
   } catch (error) {
-    console.error('Failed to get user listings:', error);
-    throw new Error('Failed to load listings. Please try again.');
+    console.error(`Failed to get listings for user ${targetDid}:`, error);
+    
+    // If this is not the current user, don't throw - just return empty results
+    if (targetDid !== agent.session?.did) {
+      console.warn(`Returning empty results for user ${targetDid} due to error`);
+      return {
+        listings: [],
+        cursor: undefined,
+      };
+    }
+    
+    throw new Error('Failed to load your listings. Please try again.');
   }
 }
 
@@ -407,16 +629,60 @@ export async function getAllListings(
         };
       }
     } catch (error) {
-      console.warn('AppView failed, falling back to empty results:', error);
+      console.warn('AppView failed, falling back to direct PDS queries:', error);
     }
   }
   
-  // Fallback to empty results if no AppView
-  console.warn('AppView not configured, cannot browse all listings');
-  return {
-    listings: [],
-    total: 0,
-  };
+  // Fallback: WhiteWind-style direct PDS queries from known users
+  console.log('Using WhiteWind-style fallback: querying known marketplace users directly');
+  
+  try {
+    // Get listings from known marketplace users
+    const knownUsers = getKnownMarketplaceUsers();
+    const allListings = await getAllListingsFromKnownUsers(knownUsers);
+    
+    // Apply client-side filtering
+    const filtered = applyClientSideFilters(allListings, filters);
+    
+    // Apply sorting
+    const sorted = applySorting(filtered, options.sortBy || 'createdAt', options.sortOrder || 'desc');
+    
+    // Apply pagination
+    const limit = options.limit || 20;
+    const startIndex = options.cursor ? parseInt(options.cursor) : 0;
+    const paginatedListings = sorted.slice(startIndex, startIndex + limit);
+    
+    const nextCursor = startIndex + limit < sorted.length ? (startIndex + limit).toString() : undefined;
+    
+    return {
+      listings: paginatedListings,
+      total: sorted.length,
+      cursor: nextCursor,
+    };
+  } catch (error) {
+    console.error('Fallback PDS queries failed:', error);
+    
+    // Last resort: return user's own listings if authenticated
+    try {
+      const agent = await getAgent();
+      if (agent?.session?.did) {
+        const userListings = await getUserListings(agent.session.did, options);
+        return {
+          listings: userListings.listings,
+          total: userListings.listings.length,
+          cursor: userListings.cursor,
+        };
+      }
+    } catch (userError) {
+      console.error('Failed to get user listings as fallback:', userError);
+    }
+    
+    // Final fallback: empty results
+    return {
+      listings: [],
+      total: 0,
+    };
+  }
 }
 
 /**

@@ -73,7 +73,7 @@ export function UserNav() {
         fetchUserProfile();
     }
 
-  }, [session, authIsLoading]); // Depend on session and authIsLoading
+  }, [session, authIsLoading, agent?.session?.did, agent?.session?.handle]); // Depend on session and authIsLoading
   
   const handleSignOut = async () => {
     try {
