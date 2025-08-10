@@ -143,3 +143,6 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({ error: 'Failed to index listing' })
+    };
+  }
+};

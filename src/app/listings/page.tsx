@@ -288,7 +288,7 @@ export default function ListingsPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="container mx-auto py-8 px-4">
         <ListingFilters
-          onFilterChange={handleFilterChange}
+          onFilterChange={{ current: handleFilterChange }}
           filters={filters}
           geoError={geoError !== null}
           isLoading={loading}

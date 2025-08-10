@@ -1,18 +1,18 @@
 [build]
   command = "npm run build"
-  publish = "out"
+  publish = ".next"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# Next.js handles routing automatically
+# No manual redirects needed for Next.js apps
 
 [build.environment]
   NODE_VERSION = "18"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NPM_FLAGS = "--legacy-peer-deps"
 
 # Enable Netlify Blobs
 [context.production.environment]
