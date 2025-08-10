@@ -58,7 +58,12 @@ const PRICE_RANGES = [
   { value: '10000', label: '$10,000' },
 ];
 
-export default function ListingFilters({ onFilterChange, filters, geoError, isLoading }: ListingFiltersProps) {
+export default function ListingFilters({ 
+  onFilterChange, 
+  filters, 
+  geoError, 
+  isLoading 
+}: ListingFiltersProps) {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     onFilterChange(name, value);
