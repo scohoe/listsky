@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { BskyAgent, ComAtprotoRepoListRecords } from '@atproto/api';
 import { CodeProject } from '@/components/code-project';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { getAgent } from '@/lib/atproto';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
 import ListingFilters from '@/components/listing-filters';
+import { getAllListings, searchListings, ListingView, SearchFilters, SearchOptions } from '@/lib/marketplace-api';
 
 // Define FilterOptions interface to match ListingFilters component
 interface FilterOptions {
@@ -20,144 +19,41 @@ interface FilterOptions {
   radius: string;
 }
 
-interface ListingPostRecord {
-  title: string;
-  description: string;
-  price?: string;
-  category?: string;
-  location?: {
-    zipCode: string;
-    address?: string;
-    latitude?: number;
-    longitude?: number;
-  };
-  tags?: string[];
-  // images are part of the main post embed
-  createdAt: string; 
-}
-
-interface EmbeddedImage {
-  alt: string;
-  image: {
-    $type: 'blob';
-    ref: { $link: string };
-    mimeType: string;
-    size: number;
-  };
-}
-
-interface PostWithListing {
-  uri: string;
-  cid: string;
-  author: {
-    did: string;
-    handle: string;
-    displayName?: string;
-    avatar?: string;
-  };
-  text: string; // The main text of the post
-  listingData: ListingPostRecord;
-  embed?: {
-    $type: 'app.bsky.embed.images';
-    images: EmbeddedImage[];
-  } | {
-    $type: 'app.bsky.embed.record';
-    record: any; // Could be a record with media, etc.
-  } | {
-    $type: 'app.bsky.embed.external';
-    external: any;
-  };
-  replyCount?: number;
-  repostCount?: number;
-  likeCount?: number;
-  indexedAt: string;
-  createdAt: string; // This is from the post itself, listingData.createdAt is from our custom schema
-}
-
 const ListingsPage = () => {
-  const [listings, setListings] = useState<PostWithListing[]>([]);
+  const [listings, setListings] = useState<ListingView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [total, setTotal] = useState(0);
   const [activeFilters, setActiveFilters] = useState<FilterOptions>({ category: '', minPrice: '', maxPrice: '', location: '', radius: '' });
 
   const fetchListings = async (currentCursor?: string, filters: FilterOptions = activeFilters) => {
     setIsLoading(true);
     setError(null);
     try {
-      const agent = await getAgent(); // No auth needed for public feeds generally
-      // We need to list records from many users, so we can't use listRecords on a single repo.
-      // Instead, we'd typically use a feed generator or search service that indexes these custom posts.
-      // For this example, we'll simulate by fetching recent posts from a known user or a broader feed if possible.
-      // A real app would use a custom feed (AppView service) or a search API that understands 'app.bsky.feed.listing'.
+      // Convert FilterOptions to SearchFilters
+      const searchFilters: SearchFilters = {
+        category: filters.category || undefined,
+        location: filters.location || undefined,
+        radius: filters.radius ? parseInt(filters.radius) : undefined,
+        minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+        maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+      };
 
-      // Placeholder: Fetching a generic timeline and filtering client-side.
-      // This is NOT efficient for production but demonstrates the concept.
-      // A proper solution involves a custom feed generator or a PDS that supports querying custom record types.
-      // In a real app, 'filters' would be passed to the API call.
-      // For example: agent.app.bsky.feed.getFeedGenerator({ feed: 'at://did:plc:xyz/app.bsky.feed.generator/custom-listings', cursor: currentCursor, limit: 25, filterParams: filters })
-      console.log('Fetching with filters:', filters); // Log filters for now
-      const response = await agent.getTimeline({ limit: 25, cursor: currentCursor });
+      const searchOptions: SearchOptions = {
+        limit: 25,
+        cursor: currentCursor,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      };
 
-      if (!response.success) {
-        throw new Error('Failed to fetch timeline.');
-      }
-
-      const fetchedPosts: PostWithListing[] = [];
-      let filteredFeed = response.data.feed;
-
-      // CLIENT-SIDE FILTERING (Placeholder - should be server-side)
-      if (filters.category) {
-        filteredFeed = filteredFeed.filter(item => {
-          const listingData = (item.post.record as any)['app.bsky.feed.listing'];
-          return listingData?.category?.toLowerCase() === filters.category.toLowerCase();
-        });
-      }
-      if (filters.location) {
-        // Basic ZIP code matching. Radius filtering is complex and needs geolocation data + calculations.
-        // This is a very simplified placeholder.
-        filteredFeed = filteredFeed.filter(item => {
-          const listingData = (item.post.record as any)['app.bsky.feed.listing'];
-          return listingData?.location?.zipCode === filters.location;
-        });
-      }
-      if (filters.minPrice || filters.maxPrice) {
-        filteredFeed = filteredFeed.filter(item => {
-          const listingData = (item.post.record as any)['app.bsky.feed.listing'];
-          const price = parseFloat(listingData?.price?.replace(/[^\d.]/g, '') || '0');
-          const minPrice = filters.minPrice ? parseFloat(filters.minPrice) : 0;
-          const maxPrice = filters.maxPrice ? parseFloat(filters.maxPrice) : Infinity;
-          return price >= minPrice && price <= maxPrice;
-        });
-      }
-      // Radius filtering is omitted here due to complexity of client-side implementation (needs geo data for listings and user).
-
-      for (const item of filteredFeed) {
-        const post = item.post;
-        const customListingData = (post.record as any)['app.bsky.feed.listing'];
-
-        if (customListingData && typeof customListingData === 'object') {
-          fetchedPosts.push({
-            uri: post.uri,
-            cid: post.cid,
-            author: post.author,
-            text: (post.record as any).text || '',
-            listingData: {
-              ...customListingData,
-              createdAt: customListingData.createdAt || post.indexedAt,
-            },
-            embed: post.embed as any,
-            replyCount: post.replyCount,
-            repostCount: post.repostCount,
-            likeCount: post.likeCount,
-            indexedAt: post.indexedAt,
-            createdAt: (post.record as any).createdAt,
-          });
-        }
-      }
+      console.log('Fetching with filters:', searchFilters);
       
-      setListings(prev => currentCursor ? [...prev, ...fetchedPosts] : fetchedPosts);
-      setCursor(response.data.cursor);
+      const response = await getAllListings(searchFilters, searchOptions);
+      
+      setListings(prev => currentCursor ? [...prev, ...response.listings] : response.listings);
+      setTotal(response.total);
+      setCursor(response.cursor);
 
     } catch (err) {
       console.error('Error fetching listings:', err);
@@ -181,15 +77,16 @@ const ListingsPage = () => {
     // fetchListings will be called by the useEffect due to activeFilters change
   };
 
-  const getImageUrl = (imageBlob: EmbeddedImage, authorDid: string): string => {
-    // Construct image URL using Bluesky's CDN
-    // The format is typically: https://cdn.bsky.app/img/{type}/plain/{did}/{cid}@{extension}
-    // We'll use feed_thumbnail for card view for performance, or feed_fullsize for detail view.
-    if (imageBlob?.image?.ref?.$link && authorDid) {
-      return `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorDid}/${imageBlob.image.ref.$link}@jpeg`;
+  const getImageUrl = (listing: ListingView): string => {
+    // Get the first image from the listing record
+    if (listing.record.images && listing.record.images.length > 0) {
+      const imageBlob = listing.record.images[0];
+      if (imageBlob?.ref && listing.author.did) {
+        return `https://cdn.bsky.app/img/feed_thumbnail/plain/${listing.author.did}/${imageBlob.ref}@jpeg`;
+      }
     }
-    // Fallback placeholder if essential parts are missing
-    return `/placeholder.svg?width=300&height=200&query=${encodeURIComponent(imageBlob?.alt || 'listing image')}`;
+    // Fallback placeholder if no images
+    return `/placeholder.svg?width=300&height=200&query=${encodeURIComponent(listing.record.title || 'listing image')}`;
   };
 
   if (isLoading && listings.length === 0) {
@@ -239,47 +136,50 @@ const ListingsPage = () => {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {listings.map((item) => (
-            <Card key={item.uri} className="flex flex-col">
+          {listings.map((listing) => (
+            <Card key={listing.uri} className="flex flex-col">
               <CardHeader>
-                {item.embed && item.embed.$type === 'app.bsky.embed.images' && item.embed.images.length > 0 && (
+                {listing.record.images && listing.record.images.length > 0 && (
                   <div className="aspect-video relative overflow-hidden rounded-t-md -mx-6 -mt-6 mb-4">
                     <img 
-                      src={getImageUrl(item.embed.images[0], item.author.did)}
-                      alt={item.embed.images[0].alt || item.listingData.title}
+                      src={getImageUrl(listing)}
+                      alt={listing.record.title}
                       className="object-cover w-full h-full"
                       onError={(e) => { 
                         // Fallback to a generic placeholder if CDN image fails
-                        e.currentTarget.src = `/placeholder.svg?width=300&height=200&query=${encodeURIComponent(item.listingData.title || 'listing')}`;
+                        e.currentTarget.src = `/placeholder.svg?width=300&height=200&query=${encodeURIComponent(listing.record.title || 'listing')}`;
                       }}
                     />
                   </div>
                 )}
                 <CardTitle className="text-xl leading-tight hover:text-primary transition-colors">
-                  <Link href={`/listings/${encodeURIComponent(item.uri)}`}>{item.listingData.title}</Link>
+                  <Link href={`/listings/${encodeURIComponent(listing.uri)}`}>{listing.record.title}</Link>
                 </CardTitle>
-                {item.listingData.price && (
-                  <p className="text-lg font-semibold text-primary">{item.listingData.price}</p>
+                {listing.record.price && (
+                  <p className="text-lg font-semibold text-primary">{listing.record.price}</p>
                 )}
                 <CardDescription className="text-xs">
-                  Posted by <Link href={`/profile/${item.author.handle}`} className="hover:underline">{item.author.displayName || item.author.handle}</Link>
-                  {' · '} {new Date(item.listingData.createdAt).toLocaleDateString()}
+                  Posted by <Link href={`/profile/${listing.author.handle || listing.author.did}`} className="hover:underline">{listing.author.displayName || listing.author.handle || 'Anonymous'}</Link>
+                  {' · '} {new Date(listing.record.createdAt).toLocaleDateString()}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow">
                 <p className="text-sm text-muted-foreground line-clamp-3">
-                  {item.listingData.description}
+                  {listing.record.description}
                 </p>
-                {item.listingData.category && (
-                  <p className="text-xs mt-2">Category: <span className="font-medium">{item.listingData.category}</span></p>
+                {listing.record.category && (
+                  <p className="text-xs mt-2">Category: <span className="font-medium">{listing.record.category}</span></p>
                 )}
-                {item.listingData.location?.zipCode && (
-                  <p className="text-xs">Location: <span className="font-medium">{item.listingData.location.zipCode}</span></p>
+                {listing.record.location?.zipCode && (
+                  <p className="text-xs">Location: <span className="font-medium">{listing.record.location.zipCode}</span></p>
+                )}
+                {listing.record.condition && (
+                  <p className="text-xs">Condition: <span className="font-medium">{listing.record.condition}</span></p>
                 )}
               </CardContent>
               <CardFooter>
                 <Button variant="outline" className="w-full" asChild>
-                  <Link href={`/listings/${encodeURIComponent(item.uri)}`}>View Details</Link>
+                  <Link href={`/listings/${encodeURIComponent(listing.uri)}`}>View Details</Link>
                 </Button>
               </CardFooter>
             </Card>

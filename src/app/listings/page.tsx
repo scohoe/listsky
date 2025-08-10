@@ -217,13 +217,7 @@ export default function ListingsPage() {
     setError(null);
 
     try {
-      if (!agent.session) {
-        setError('Please log in to view listings');
-        setLoading(false);
-        return;
-      }
-
-      // Get listings from the marketplace AppView
+      // Get listings from the marketplace AppView (no authentication required for browsing)
       const response = await getAllListings({}, { limit: 100 });
 
       setListings(response.listings);
@@ -347,14 +341,12 @@ export default function ListingsPage() {
           <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-lg">
             <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
               <p className="text-red-600 font-medium mb-4">{error}</p>
-              {error === 'Please log in to view listings' && (
-                <Button 
-                  asChild 
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                >
-                  <Link href="/auth/login">Log In</Link>
-                </Button>
-              )}
+              <Button 
+                onClick={fetchListings}
+                className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                Try Again
+              </Button>
             </div>
           </div>
         ) : filteredListings.length === 0 ? (
