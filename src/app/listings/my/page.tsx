@@ -158,7 +158,7 @@ function MyListingsPage() {
 
   return (
     <CodeProject id="my-listings">
-      <div className="container mx-auto py-8 px-4 md:px-6">
+      <div className="py-2">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             My Listings

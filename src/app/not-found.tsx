@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function NotFound() {
   return (
-    <div className="container mx-auto py-16 px-4 md:px-6 max-w-2xl">
+    <div className="py-16 max-w-2xl mx-auto">
       <Card className="text-center">
         <CardHeader>
           <CardTitle className="text-6xl font-bold text-muted-foreground mb-4">404</CardTitle>

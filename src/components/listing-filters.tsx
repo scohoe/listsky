@@ -59,7 +59,7 @@ const PRICE_RANGES = [
 ];
 
 export default function ListingFilters({ 
-  onFilterChange, 
+  onFilterChange,
   filters, 
   geoError, 
   isLoading 

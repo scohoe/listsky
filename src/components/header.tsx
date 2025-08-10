@@ -97,12 +97,12 @@ export default function Header() {
           <Link href="/" className="font-bold text-xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:scale-105 transition-transform duration-200">
             Bluesky Listings
           </Link>
-          <nav className="hidden md:flex gap-8">
+          <nav className="hidden md:flex gap-6">
             <NavLinks />
           </nav>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Mobile Navigation */} 
           <div className="md:hidden">
             <DropdownMenu>
@@ -123,13 +123,13 @@ export default function Header() {
           {/* Desktop Navigation Actions */} 
           {isLoggedIn ? (
             <>
-              <Button asChild variant="default" className="hidden md:flex bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200">
+              <Button asChild variant="default" size="sm" className="hidden md:flex bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200">
                 <Link href="/listings/new">Create Listing</Link>
               </Button>
               <UserNav />
             </>
           ) : (
-            <Button asChild className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200">
+            <Button asChild size="sm" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200">
               <Link href="/auth/login">Sign in with Bluesky</Link>
             </Button>
           )}

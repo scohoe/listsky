@@ -311,8 +311,8 @@ const NewListingPage = () => {
 
   return (
     <CodeProject id="new-listing-form">
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="container mx-auto py-8 px-4 md:px-6 max-w-3xl">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 -mx-4 lg:-mx-6 xl:-mx-8 -my-6">
+        <div className="max-w-3xl mx-auto py-8 px-4 md:px-6">
           <Card className="bg-white/80 backdrop-blur-sm border border-gray-200 shadow-xl">
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mb-4">

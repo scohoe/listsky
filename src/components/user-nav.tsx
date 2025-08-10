@@ -98,14 +98,14 @@ export function UserNav() {
   if (authIsLoading || !session) {
     // Optionally, return a skeleton or null if no user is logged in
     // For now, returning null if no session, or a small loading indicator
-    return authIsLoading ? <div className="h-8 w-8 bg-muted rounded-full animate-pulse"></div> : null;
+    return authIsLoading ? <div className="h-6 w-6 bg-muted rounded-full animate-pulse"></div> : null;
   }
 
   // If session exists but profile is still loading
   if (isProfileLoading) {
     return (
-      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-        <Avatar className="h-8 w-8">
+      <Button variant="ghost" className="relative h-6 w-6 rounded-full">
+        <Avatar className="h-6 w-6">
           <AvatarFallback>{(agent?.session?.handle || 'U').charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
       </Button>
@@ -117,9 +117,9 @@ export function UserNav() {
      // This case should ideally be handled by the fallback in useEffect
      // but as a safeguard:
     return (
-      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={`/placeholder.svg?width=32&height=32&query=${encodeURIComponent(agent?.session?.handle || 'user')}`} alt={agent?.session?.handle || 'User'} />
+      <Button variant="ghost" className="relative h-6 w-6 rounded-full">
+        <Avatar className="h-6 w-6">
+          <AvatarImage src={`/placeholder.svg?width=24&height=24&query=${encodeURIComponent(agent?.session?.handle || 'user')}`} alt={agent?.session?.handle || 'User'} />
           <AvatarFallback>{(agent?.session?.handle || 'U').charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
       </Button>
@@ -129,8 +129,8 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-8 w-8">
+        <Button variant="ghost" className="relative h-6 w-6 rounded-full">
+          <Avatar className="h-6 w-6">
             <AvatarImage src={userProfile.image} alt={userProfile.name} />
             <AvatarFallback>{userProfile.name.charAt(0).toUpperCase()}</AvatarFallback>
           </Avatar>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { BskyAgent, ComAtprotoRepoGetRecord } from '@atproto/api';
+import { BskyAgent, ComAtprotoRepoGetRecord, BlobRef } from '@atproto/api';
 import { CodeProject } from '@/components/code-project';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,72 +13,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ArrowLeft, ExternalLink, MapPin, Tag, DollarSign, CalendarDays, MessageSquare, ListFilter } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { ListingRecord, ListingView } from '@/lib/marketplace-api';
 
-interface ListingPostRecord {
-  title: string;
-  description: string;
-  price?: string;
-  category?: string;
-  location?: {
-    zipCode: string;
-    address?: string;
-    latitude?: number;
-    longitude?: number;
-  };
-  tags?: string[];
-  createdAt: string;
-  allowDirectMessage?: boolean;
-}
-
-interface EmbeddedImage {
-  alt: string;
-  image: {
-    $type: 'blob';
-    ref: { $link: string };
-    mimeType: string;
-    size: number;
-  };
-}
-
-interface FullPostView {
-  uri: string;
-  cid: string;
-  author: {
-    did: string;
-    handle: string;
-    displayName?: string;
-    avatar?: string;
-  };
-  record: {
-    $type: string;
-    text: string;
-    createdAt: string;
-    langs?: string[];
-    embed?: {
-      $type: 'app.bsky.embed.images';
-      images: EmbeddedImage[];
-    } | {
-      $type: 'app.bsky.embed.record';
-      record: any; 
-    } | {
-      $type: 'app.bsky.embed.external';
-      external: any;
-    };
-    'app.bsky.feed.listing'?: ListingPostRecord; // Our custom data
-  };
-  embed?: any; // Duplicates record.embed for convenience sometimes
-  replyCount?: number;
-  repostCount?: number;
-  likeCount?: number;
-  indexedAt: string;
-  labels?: any[];
-}
+// Using the proper marketplace interfaces from the API
+// ListingRecord and ListingView are imported from marketplace-api.ts
 
 const ListingDetailPage = () => {
   const params = useParams();
   const router = useRouter();
   const { session, agent } = useAuth();
-  const [post, setPost] = useState<FullPostView | null>(null);
+  const [listing, setListing] = useState<ListingView | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -124,43 +68,51 @@ const ListingDetailPage = () => {
         const response = await agent.com.atproto.repo.getRecord({ repo, collection, rkey });
         
         if (!response.success || !response.data.value) {
-          throw new Error('Failed to fetch post details or post not found.');
+          throw new Error('Failed to fetch listing details or listing not found.');
         }
 
-        // We need to reconstruct a FullPostView-like object for consistency
-        // getRecord returns { uri, cid, value (this is the record) }
-        // We're missing author profile, counts, etc. that getPostThread or getPosts would give.
-        // For a full view, we might need to make additional calls or use a different endpoint if available.
-        // For now, we'll work with what getRecord gives and simulate the rest or leave blank.
-        
-        // Attempt to get author profile for more details
-        let authorProfile = { did: repo, handle: repo }; // Fallback
+        // Attempt to get author profile for better display
+        let authorProfile: any = { did: repo, handle: repo, displayName: repo, avatar: null }; // Fallback
         try {
             const profileRes = await agent.getProfile({ actor: repo });
             if (profileRes.success) {
-                authorProfile = profileRes.data;
+                authorProfile = profileRes.data as any;
             }
         } catch (profileError) {
             console.warn('Could not fetch author profile:', profileError);
         }
 
-        const recordValue = response.data.value as any;
-        const listingData = recordValue['app.bsky.feed.listing'];
-
-        if (!listingData) {
-            throw new Error('This post does not appear to be a listing.');
+        const recordValue = response.data.value as ListingRecord;
+        
+        // Validate that this is actually a listing record
+        if (!recordValue.title || !recordValue.description) {
+            throw new Error('This record does not appear to be a valid listing.');
         }
 
-        setPost({
+        // Check if listing is active
+        if (recordValue.status && recordValue.status !== 'active') {
+            throw new Error(`This listing is ${recordValue.status} and no longer available.`);
+        }
+
+        // Check if listing has expired
+        if (recordValue.expiresAt) {
+            const expiryDate = new Date(recordValue.expiresAt);
+            if (expiryDate < new Date()) {
+                throw new Error('This listing has expired.');
+            }
+        }
+
+        setListing({
             uri: response.data.uri,
             cid: response.data.cid as string,
-            author: authorProfile as FullPostView['author'], // Cast needed due to simplified fetch
-            record: {
-                ...recordValue,
-                'app.bsky.feed.listing': listingData,
+            author: {
+                did: repo,
+                handle: authorProfile.handle,
+                displayName: authorProfile.displayName || authorProfile.handle,
+                avatar: authorProfile.avatar,
             },
-            // Counts and other fields would ideally come from a richer endpoint like getPostThread
-            indexedAt: recordValue.createdAt, // Assuming indexedAt is similar to createdAt for getRecord
+            record: recordValue,
+            indexedAt: recordValue.createdAt,
         });
 
       } catch (err) {
@@ -174,21 +126,19 @@ const ListingDetailPage = () => {
     fetchPostDetails();
   }, [atUri]);
 
-  const getImageUrl = (imageBlob: EmbeddedImage, authorDid: string): string => {
-    return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${imageBlob.image.ref.$link}@jpeg`;
+  const getImageUrl = (imageBlob: BlobRef, authorDid: string): string => {
+    return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${imageBlob.ref}@jpeg`;
   };
 
   const handleNextImage = () => {
-    if (post?.record.embed?.$type === 'app.bsky.embed.images') {
-      const embed = post.record.embed as { $type: 'app.bsky.embed.images'; images: EmbeddedImage[] };
-      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % embed.images.length);
+    if (listing?.record.images && listing.record.images.length > 0) {
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % listing.record.images.length);
     }
   };
 
   const handlePrevImage = () => {
-    if (post?.record.embed?.$type === 'app.bsky.embed.images') {
-      const embed = post.record.embed as { $type: 'app.bsky.embed.images'; images: EmbeddedImage[] };
-      setCurrentImageIndex((prevIndex) => (prevIndex - 1 + embed.images.length) % embed.images.length);
+    if (listing?.record.images && listing.record.images.length > 0) {
+      setCurrentImageIndex((prevIndex) => (prevIndex - 1 + listing.record.images.length) % listing.record.images.length);
     }
   };
 
@@ -232,7 +182,7 @@ const ListingDetailPage = () => {
     );
   }
 
-  if (!post || !post.record['app.bsky.feed.listing']) {
+  if (!listing || !listing.record) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="container mx-auto py-8 px-4 md:px-6 max-w-2xl text-center">
@@ -258,8 +208,8 @@ const ListingDetailPage = () => {
     );
   }
 
-  const listing = post.record['app.bsky.feed.listing']!;
-  const images = post.record.embed?.$type === 'app.bsky.embed.images' ? post.record.embed.images : [];
+  const listingRecord = listing.record;
+  const images = listingRecord.images || [];
 
   return (
     <CodeProject id="listing-detail-page">
@@ -278,10 +228,10 @@ const ListingDetailPage = () => {
             {images.length > 0 && (
               <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200">
                 <img 
-                  src={getImageUrl(images[currentImageIndex], post.author.did)}
-                  alt={images[currentImageIndex].alt || listing.title}
+                  src={getImageUrl(images[currentImageIndex], listing.author.did)}
+                  alt={`Image for ${listingRecord.title}`}
                   className="object-contain w-full h-full rounded-t-lg"
-                  onError={(e) => { e.currentTarget.src = `/placeholder.svg?width=600&height=400&query=${encodeURIComponent(listing.title)}`; }}
+                  onError={(e) => { e.currentTarget.src = `/placeholder.svg?width=600&height=400&query=${encodeURIComponent(listingRecord.title)}`; }}
                 />
                 {images.length > 1 && (
                   <>
@@ -320,50 +270,50 @@ const ListingDetailPage = () => {
             <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6">
                 <div className="flex-1">
                     <CardTitle className="text-4xl font-bold tracking-tight mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                      {listing.title}
+                      {listingRecord.title}
                     </CardTitle>
-                    {listing.price && (
+                    {listingRecord.price && (
                         <div className="inline-flex items-center bg-gradient-to-r from-emerald-500 to-green-500 text-white px-4 py-2 rounded-full shadow-lg">
                             <DollarSign className="h-5 w-5 mr-2" /> 
-                            <span className="text-xl font-semibold">{listing.price}</span>
+                            <span className="text-xl font-semibold">{listingRecord.price}</span>
                         </div>
                     )}
                 </div>
                 <div className="mt-4 md:mt-0 md:text-right">
-                    <Link href={`/profile/${post.author.handle}`} className="flex items-center justify-end group">
+                    <Link href={`/profile/${listing.author.handle}`} className="flex items-center justify-end group">
                         <div className="mr-4 text-right">
-                            <p className="font-semibold text-lg group-hover:text-blue-600 transition-colors">{post.author.displayName || post.author.handle}</p>
-                            <p className="text-sm text-gray-500">@{post.author.handle}</p>
+                            <p className="font-semibold text-lg group-hover:text-blue-600 transition-colors">{listing.author.displayName || listing.author.handle}</p>
+                            <p className="text-sm text-gray-500">@{listing.author.handle}</p>
                         </div>
                         <Avatar className="h-14 w-14 group-hover:ring-4 group-hover:ring-blue-200 transition-all duration-200 shadow-lg">
-                            <AvatarImage src={post.author.avatar} alt={post.author.handle} />
+                            <AvatarImage src={listing.author.avatar} alt={listing.author.handle} />
                             <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold">
-                              {(post.author.displayName || post.author.handle).substring(0,2).toUpperCase()}
+                              {(listing.author.displayName || listing.author.handle || 'U').substring(0,2).toUpperCase()}
                             </AvatarFallback>
                         </Avatar>
                     </Link>
                     <div className="mt-2 flex items-center justify-end text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-1">
                         <CalendarDays className="h-4 w-4 mr-2" /> 
-                        Posted: {new Date(listing.createdAt).toLocaleDateString()}
+                        Posted: {new Date(listingRecord.createdAt).toLocaleDateString()}
                     </div>
                 </div>
             </div>
 
-            {listing.description && (
+            {listingRecord.description && (
               <div className="mb-8">
                 <h3 className="text-xl font-semibold mb-4 flex items-center text-gray-800">
                   <span className="text-blue-600 mr-2">📝</span> Description
                 </h3>
                 <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
                   <p className="text-gray-700 leading-relaxed text-lg">
-                    {listing.description.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>)}
+                    {listingRecord.description.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>)}
                   </p>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {listing.category && (
+                {listingRecord.category && (
                     <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
                         <div className="flex items-center mb-2">
                             <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mr-3">
@@ -371,10 +321,21 @@ const ListingDetailPage = () => {
                             </div>
                             <p className="text-sm font-medium text-gray-600">Category</p>
                         </div>
-                        <p className="font-semibold text-lg text-gray-800">{listing.category}</p>
+                        <p className="font-semibold text-lg text-gray-800">{listingRecord.category}</p>
                     </div>
                 )}
-                {listing.location?.zipCode && (
+                {listingRecord.condition && (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                        <div className="flex items-center mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center mr-3">
+                                <Tag className="h-4 w-4 text-white"/>
+                            </div>
+                            <p className="text-sm font-medium text-gray-600">Condition</p>
+                        </div>
+                        <p className="font-semibold text-lg text-gray-800 capitalize">{listingRecord.condition}</p>
+                    </div>
+                )}
+                {listingRecord.location?.zipCode && (
                     <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-4 border border-red-200">
                         <div className="flex items-center mb-2">
                             <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-orange-500 rounded-full flex items-center justify-center mr-3">
@@ -383,19 +344,19 @@ const ListingDetailPage = () => {
                             <p className="text-sm font-medium text-gray-600">Location</p>
                         </div>
                         <p className="font-semibold text-lg text-gray-800">
-                          {listing.location.zipCode}{listing.location.address ? `, ${listing.location.address}` : ''}
+                          {listingRecord.location.zipCode}{listingRecord.location.address ? `, ${listingRecord.location.address}` : ''}
                         </p>
                     </div>
                 )}
             </div>
 
-            {listing.tags && listing.tags.length > 0 && (
+            {listingRecord.tags && listingRecord.tags.length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-semibold mb-4 flex items-center text-gray-800">
                   <span className="text-orange-600 mr-2">🏷️</span> Tags
                 </h3>
                 <div className="flex flex-wrap gap-3">
-                  {listing.tags.map((tag) => (
+                  {listingRecord.tags.map((tag) => (
                     <Badge 
                       key={tag} 
                       variant="outline" 
@@ -411,13 +372,13 @@ const ListingDetailPage = () => {
           <CardFooter className="p-8 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-6">
             <div className="text-sm text-gray-600 flex items-center bg-white rounded-lg px-4 py-2 shadow-sm">
               <CalendarDays className="h-4 w-4 mr-2 text-blue-600" /> 
-              Posted on {new Date(listing.createdAt).toLocaleDateString()}
+              Posted on {new Date(listingRecord.createdAt).toLocaleDateString()}
             </div>
             <div className="flex gap-3">
-              {agent.session?.did !== post.author.did && (
-                listing.allowDirectMessage ? (
+              {agent.session?.did !== listing.author.did && (
+                listingRecord.allowMessages ? (
                   <Link 
-                    href={`https://bsky.app/messages/${post.author.did}?text=${encodeURIComponent(`Regarding your listing: "${listing.title}" (${post.uri})`)}`} 
+                    href={`https://bsky.app/messages/${listing.author.did}?text=${encodeURIComponent(`Regarding your listing: "${listingRecord.title}" (${listing.uri})`)}`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     passHref
@@ -428,7 +389,7 @@ const ListingDetailPage = () => {
                   </Link>
                 ) : (
                   <Link 
-                    href={`https://bsky.app/profile/${post.author.handle}`} 
+                    href={`https://bsky.app/profile/${listing.author.handle}`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     passHref
@@ -439,8 +400,8 @@ const ListingDetailPage = () => {
                   </Link>
                 )
               )}
-              {agent.session?.did === post.author.did && (
-                  <Link href={`/listings/${encodeURIComponent(post.uri)}/edit`} passHref>
+              {agent.session?.did === listing.author.did && (
+                  <Link href={`/listings/${encodeURIComponent(listing.uri)}/edit`} passHref>
                       <Button 
                         variant="outline" 
                         className="border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 transition-all duration-200 shadow-sm hover:shadow-md"

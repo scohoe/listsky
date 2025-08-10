@@ -279,8 +279,8 @@ export default function ListingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="container mx-auto py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 -mx-4 lg:-mx-6 xl:-mx-8 -my-6">
+      <div className="py-8 px-4">
         <ListingFilters
           onFilterChange={handleFilterChange}
           filters={filters}

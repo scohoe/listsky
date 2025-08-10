@@ -30,8 +30,12 @@ export default function RootLayout({
           <AuthProvider>
             <div className="flex flex-col min-h-screen">
               <Header />
-              <main className="flex-1">
-                {children}
+              <main className="flex-1 container mx-auto px-4 lg:px-6 xl:px-8">
+                <div className="flex flex-col lg:flex-row gap-6 py-6">
+                  <div className="flex-1 min-w-0">
+                    {children}
+                  </div>
+                </div>
               </main>
               <footer className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="container mx-auto px-4 py-6">
