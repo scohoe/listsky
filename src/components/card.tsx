@@ -32,10 +32,8 @@ export default function Card({
   author,
   createdAt,
 }: CardProps) {
-  // Extract the record ID from the URI
-  const recordId = uri.split('/').pop();
-  const authorId = author.did.split('/').pop();
-  const listingUrl = `/listings/${authorId}/${recordId}`;
+  // Use the full encoded AT URI for the listing URL
+  const listingUrl = `/listings/${encodeURIComponent(uri)}`;
   
   return (
     <UICard className="h-full flex flex-col bg-white/80 backdrop-blur-sm border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 group">
